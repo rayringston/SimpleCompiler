@@ -483,8 +483,10 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 				nextToken();
 			} else {
-				abort("Print expression not yet implemented");
+				//abort("Print expression not yet implemented");
 				expression(caller);
+				emitter.emitLine("mov x0, x11");
+				emitter.emitLine("bl printf");
 			}
 		} else if (checkToken(TOKEN_TYPE::IF)) {// IF condition THEN statement ENDIF
 			
