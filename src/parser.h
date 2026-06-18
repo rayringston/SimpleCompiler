@@ -282,8 +282,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 				nextToken();
 			} else {
-				abort("Print expression not yet implemented");
 				expression(caller, parameters);
+				emitter.functionLine("mov x0, x11");
+				emitter.functionLine("bl print_int");
 			}
 		} else if (checkToken(TOKEN_TYPE::IF)) { // IF condition THEN statement ENDIF
 			int elseIfCount = 0;
@@ -483,10 +484,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 				nextToken();
 			} else {
-				//abort("Print expression not yet implemented");
 				expression(caller);
 				emitter.emitLine("mov x0, x11");
-				emitter.emitLine("bl printf");
+				emitter.emitLine("bl print_int");
 			}
 		} else if (checkToken(TOKEN_TYPE::IF)) {// IF condition THEN statement ENDIF
 			
