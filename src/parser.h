@@ -266,7 +266,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 	if (caller == TOKEN_TYPE::FUNC) { // -------------------------------------------------------------- IN-FUNCTION STATEMENTS	
 		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT - STRING | EXPRESSION - NL
 			cout << "FUNC-STATEMENT-PRINT\n";
+			
 			nextToken();
+			match(TOKEN_TYPE::LPARENTH);
 
 			if (checkToken(TOKEN_TYPE::STRING)) { // String is for a literal, text is keyword to define variable
 				// check literals table for copy, add it if not.
@@ -284,6 +286,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 				emitter.functionLine("mov x0, x11");
 				emitter.functionLine("bl print_int");
 			}
+
+			match(TOKEN_TYPE::RPARENTH);
+
 		} else if (checkToken(TOKEN_TYPE::IF)) { // IF condition THEN statement ENDIF
 			int elseIfCount = 0;
 
@@ -464,10 +469,12 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			abort("Invalid state at " + string(curToken.text) + " (" + tokenTypeToString(curToken.type) + ").");
 		}
 	} else { // --------------------------------------------------------------------------------------------------- OUT-OF-FUNCTION STATEMENTS
-		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT - STRING | EXPRESSION - NL
+		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT ( STRING | EXPRESSION ) NL
 			cout << "STATEMENT-PRINT\n";
+	
 			nextToken();
-
+			match(TOKEN_TYPE::LPARENTH);
+			
 			if (checkToken(TOKEN_TYPE::STRING)) { // String is for a literal, text is keyword to define variable
 				// check literals table for copy, add it if not.
 				if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) stringLiterals.push_back(curToken.text);
@@ -484,6 +491,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 				emitter.emitLine("mov x0, x11");
 				emitter.emitLine("bl print_int");
 			}
+			
+			match(TOKEN_TYPE::RPARENTH);
+
 		} else if (checkToken(TOKEN_TYPE::IF)) {// IF condition THEN statement ENDIF
 			
 

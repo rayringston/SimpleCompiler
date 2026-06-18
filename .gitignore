@@ -1,0 +1,6 @@
+# do not include the build directory
+# this contains the compiler executable, and the runtime object files, all of which are made with the build.sh script
+build/
+
+# don't include my notes file anyways
+notes.txt

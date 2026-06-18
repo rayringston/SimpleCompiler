@@ -1,2 +1,2 @@
-TEXT x = "abc"
-PRINT x
+INT x = 10
+PRINT(x)

@@ -51,6 +51,8 @@ enum TOKEN_TYPE : int {
 	EQEQ,
 	NEQ,
 	COMMA,
+	LPARENTH,
+	RPARENTH,
 	COMMENT // #
 };
 
@@ -101,6 +103,8 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case EQEQ: return "EQEQ";
 		case NEQ: return "NEQ";
 		case COMMENT: return "COMMENT";
+		case RPARENTH: return "RPARENTH";
+		case LPARENTH: return "LPARENTH";
 		case COMMA: return "COMMA";
 
 		default: return "INVALID";
@@ -231,6 +235,10 @@ Token Lexer::getToken() {
 		curToken = Token(string(1, curChar), TOKEN_TYPE::MODULO);
 	} else if (curChar == ',') {
 		curToken = Token(string(1, curChar), TOKEN_TYPE::COMMA);
+	} else if (curChar == '(') {
+		curToken = Token(string(1, curChar), TOKEN_TYPE::LPARENTH);
+	} else if (curChar == ')') {
+		curToken = Token(string(1, curChar), TOKEN_TYPE::RPARENTH);
 	} else if (curChar == '!') {
 		if (peek() == '=') {
 			char lastChar = curChar;
