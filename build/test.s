@@ -2,7 +2,7 @@
 .text
 
 _start:
-mov x9, #1234
+mov x9, #0
 mov x10, x9
 mov x11, x10
 mov x0, x11
