@@ -47,12 +47,9 @@ int main(int argc, char* argv[]) { // compiler <fileName> -o <outputName>
 	streambuf* streamBuffer = cout.rdbuf();
 
 	if (argc >= 3) {
-		if (regex_match(argv[2], cm, pattern)) {
-			outFilePath = argv[2];
-		} else {
-			cout << argv[2] << " is not a valid file name. Outputting to /out.s" << endl;
-		}
+		outFilePath = argv[2];
 		
+	
 		int verbose = 0;
 		for (int i = 3; i < argc; i++) {
 			if (string(argv[i]) == "--verbose" || string(argv[i]) == "-v") { 
