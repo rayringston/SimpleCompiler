@@ -8,7 +8,7 @@ using namespace std;
 
 struct functionParams {
 	string name;
-	vector<string> params;
+	vector<pair<string, TOKEN_TYPE>> params;
 };
 
 class FunctionMap {
@@ -16,21 +16,22 @@ class FunctionMap {
 		FunctionMap() {}
 		
 		int exists(string name) { // helper function to figure out if an entry exists
-			if (find(functions.begin(), functions.end(), name) == functions.end()) return 0;
-			else return 1;
+			for (auto function : functions) {
+				if (function.first == name) return 1;
+			}
+			return 0;
 		}
 
-		int paramExists(string name, string param) { // check to see a param is already defined -- maybe not useful
+		int paramExists(string name, string param, TOKEN_TYPE type) { // check to see a param is already defined -- maybe not useful
 			for (int i = 0; i < paramMap.size(); i++) {
 				if (paramMap[i].name == name) {
-					for (int j = 0; j < paramMap[i].params.size(); i++) {
-						if (paramMap[i].params[j] == param) return 1;
+					for (int j = 0; j < paramMap[i].params.size(); j++) {
+						if (paramMap[i].params[j].first == param && paramMap[i].params[j].second == type) return 1;
 					}
 				}
 			}
 			return 0;
 		}
-
 
 		/*	TOP	  BOT
 		 *	
@@ -44,8 +45,18 @@ class FunctionMap {
 		 *	5  4  3
 		 *	40 32 24 16  8  0
 		 */
-		string getParamOffset(vector<string> params, string param) {
-			int idx = find(params.begin(), params.end(), param) - params.begin();
+
+		int getParamIdx(vector<pair<string, TOKEN_TYPE>> params, string param) { // helper function to get the index of a parameter in the function's parameter list
+			int i = 0;
+			for (auto p : params) {
+				if (p.first == param) return i;
+				i++;
+			}
+			return -1; // should never get here if you check for existence first
+		}
+		
+		string getParamOffset(vector<pair<string, TOKEN_TYPE>> params, string param) {
+			int idx = getParamIdx(params, param);
 
 			int posFromBack;
 				
@@ -61,23 +72,23 @@ class FunctionMap {
 		}
 
 		string getLabel(string name) { 	// helper function to get the label for each function
-			int idx = find(functions.begin(), functions.end(), name) - functions.begin();
+			int idx = getParamIdx(functions, name); // works the same way
 
 			return "FUNC" + idx;
 		}
 
-		vector<string> getParams(string name) { // return the params listed under a function label
+		vector<pair<string, TOKEN_TYPE>> getParams(string name) { // return the params listed under a function label
 			for (int i = 0; i < paramMap.size(); i++) {
 				if (paramMap[i].name == name) return paramMap[i].params;
 			}
 			return {};
 		}
 
-		void push_name(string name) { // should be called before push_back 
-			functions.push_back(name);
+		void push_name(string name, TOKEN_TYPE type) { // should be called before push_back 
+			functions.push_back({name, type});
 		}
 
-		void push_back(string name, vector<string> params = {}) {
+		void push_back(string name, vector<pair<string, TOKEN_TYPE>> params = {}) {
 			functionParams entry;
 			entry.name = name;
 			entry.params = params;
@@ -86,7 +97,7 @@ class FunctionMap {
 		}
 
 		vector<functionParams> paramMap;
-		vector<string> functions;
+		vector<pair<string, TOKEN_TYPE>> functions;
 };
 
 class SymbolMap {
@@ -168,13 +179,13 @@ class Parser {
 		void match(TOKEN_TYPE kind);
 		// Sytanx function declarations
 		void program();
-		void statement(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
+		void statement(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 		void nl();
-		void expression(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
-		void term(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
-		void unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
-		TOKEN_TYPE primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
-		void condition(string exitLabel, TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
+		void expression(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		void term(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		void unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		void primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		void condition(string exitLabel, TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 
 		Lexer& lexer;
 		Emitter& emitter;
@@ -274,7 +285,7 @@ void Parser::program() {
 	emitter.emitLine("svc #0");
 }
 
-void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
+void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	// Print statement
 	if (caller == TOKEN_TYPE::FUNC) { // -------------------------------------------------------------- IN-FUNCTION STATEMENTS	
 		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT - STRING | EXPRESSION - NL
@@ -581,15 +592,30 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			emitter.emitLine("XWHILE" + to_string(whileCount) + ":");
 			whileCount++;
 
-		} else if (checkToken(TOKEN_TYPE::FUNC)) { // FUNC identifier IS nl {statement} ENDFUNC nl
+		} else if (checkToken(TOKEN_TYPE::FUNC)) { // FUNC([INT | FLOAT | TEXT | none]) identifier IS nl {statement} ENDFUNC nl
 			cout << "STATEMENT-FUNCTION\n";
 			nextToken();
+			
+			TOKEN_TYPE returnType = TOKEN_TYPE::INVALID; // invalid for no return
+
+			if (checkToken(TOKEN_TYPE::LPARENTH)) {
+				nextToken();
+
+				if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) {
+					returnType = curToken.type;
+					nextToken();
+				} else {
+					abort("Expected return type for function, got " + tokenTypeToString(curToken.type));
+				}
+
+				match(TOKEN_TYPE::RPARENTH);
+			}
 
 			if (functionMap.exists(curToken.text)) {
 				abort("Function (" + curToken.text + ") already exists");
 			}
 
-			functionMap.push_name(curToken.text);
+			functionMap.push_name(curToken.text, returnType);
 
 			string funcIdentifier = curToken.text;
 			string bLabel = functionMap.getLabel(curToken.text);	
@@ -599,19 +625,33 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 			match(TOKEN_TYPE::IDENTIFIER);
 			
-			vector<string> params;
+			vector<pair<string, TOKEN_TYPE>> params;
 
-			if (checkToken(TOKEN_TYPE::USING)) { // FUNC identifier USING identifier {"," identifier} IS ...
+			if (checkToken(TOKEN_TYPE::USING)) { // FUNC identifier USING [INT | FLOAT | TEXT]identifier {"," [INT | FLOAT | TEXT] identifier} IS ...
 				cout << "\tPARAMETERS\n";
 				nextToken();
 
-				params.push_back(curToken.text);
+				if (curToken.type != TOKEN_TYPE::INT && curToken.type != TOKEN_TYPE::FLOAT && curToken.type != TOKEN_TYPE::TEXT) {
+					abort("Expected parameter type, got " + curToken.text);
+				}
+
+				TOKEN_TYPE paramType = curToken.type;
+				nextToken();
+
+				params.push_back({curToken.text, paramType});
 				match(TOKEN_TYPE::IDENTIFIER);
 				
 				while (checkToken(TOKEN_TYPE::IS) == 0) {
 					match(TOKEN_TYPE::COMMA);
 					
-					if (find(params.begin(), params.end(), curToken.text) != params.end()) {
+					if (curToken.type != TOKEN_TYPE::INT && curToken.type != TOKEN_TYPE::FLOAT && curToken.type != TOKEN_TYPE::TEXT) {
+						abort("Expected parameter type, got " + curToken.text);
+					}
+
+					paramType = curToken.type;
+					nextToken();
+
+					if (find(params.begin(), params.end(), pair{curToken.text, paramType}) != params.end()) {
 						abort("Function parameter (" + curToken.text + ") already exists");
 					}
 					
@@ -619,7 +659,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 						abort("Symbol (" + curToken.text + ") exists outside of the function");
 					}
 
-					params.push_back(curToken.text);
+					params.push_back({curToken.text, paramType});
 
 					match(TOKEN_TYPE::IDENTIFIER);
 				}
@@ -801,7 +841,7 @@ void Parser::nl() {
 }
 
 // expression ::= term {("+" | "/") term}
-void Parser::expression(TOKEN_TYPE caller, vector<string> parameters) {
+void Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "EXPRESSION\n";
 
 	term(caller, parameters);
@@ -826,7 +866,7 @@ void Parser::expression(TOKEN_TYPE caller, vector<string> parameters) {
 }
 
 // term ::= unary {("*" | "/") unary}
-void Parser::term(TOKEN_TYPE caller, vector<string> parameters) {
+void Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "TERM\n";
 
 	unary(caller, parameters); // hold each unary in r10. do operations on r9 and put the results in r10
@@ -859,7 +899,7 @@ void Parser::term(TOKEN_TYPE caller, vector<string> parameters) {
 }
 
 // unary ::= ["+" | "-"] primary
-void Parser::unary(TOKEN_TYPE caller, vector<string> parameters) {
+void Parser::unary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "UNARY\n";
 
 	TOKEN_TYPE lastType = curToken.type;
@@ -877,7 +917,7 @@ void Parser::unary(TOKEN_TYPE caller, vector<string> parameters) {
 }
 
 // primary ::= number | identifier
-TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Primary held in r9
+void Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) { // Primary held in r9
 	cout << "PRIMARY (" << curToken.text << ")\n";
 	TOKEN_TYPE type = TOKEN_TYPE::INVALID;
 
@@ -889,28 +929,35 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Pr
 
 		type = TOKEN_TYPE::INT;
 	} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) {
-		if (!symbolMap.exists(curToken.text) && find(parameters.begin(), parameters.end(), curToken.text) == parameters.end() && !functionMap.exists(curToken.text)) {
-			// doesn't exist as a variable, parameter, or label
-			abort("Undeclared symbol (" + curToken.text);
-		} else if (!functionMap.exists(curToken.text)) { // not a function
-
+		if (!functionMap.exists(curToken.text)) { // not a function
 			if (caller == TOKEN_TYPE::FUNC) {
 				 if (!parameters.empty()) { // parameter
-					type = TOKEN_TYPE::INT;
 
-					if (find(parameters.begin(), parameters.end(), curToken.text) != parameters.end()) {
-						emitter.functionLine("ldr x9, [sp, " + functionMap.getParamOffset(parameters, curToken.text) + "]");
-					} else {
-						emitter.functionLine("adr x9, " + symbolMap.getLabel(curToken.text));
-						emitter.functionLine("ldr x9, [x9]");
+					for (auto p : parameters) {
+						if (p.first == curToken.text) {
+							type = p.second;
+							emitter.functionLine("ldr x9, [sp, " + functionMap.getParamOffset(parameters, curToken.text) + "]");
+							break;
+						}
+					}
+					if (type == TOKEN_TYPE::INVALID) { // not a parameter, check if variable in symbol table
+						 if (!symbolMap.exists(curToken.text)) {
+							abort("Symbol (" + curToken.text + ") does not exist.");
+						} else {
+							type = symbolMap.getType(curToken.text);
+							emitter.functionLine("adr x9, " + symbolMap.getLabel(curToken.text));
+							emitter.functionLine("ldr x9, [x9]");	
+						}
 					}
 				}
 			}
 			
-			else { // variable
+			else if (symbolMap.exists(curToken.text)) { // variable
 				type = symbolMap.getType(curToken.text);
 				emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text));
 				emitter.emitLine("ldr x9, [x9]");
+			} else {
+				abort("Symbol (" + curToken.text + ") does not exist.");
 			}
 
 			nextToken();
@@ -955,10 +1002,12 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Pr
 	} else {
 		abort("Expected number or identifier, recieved " + curToken.text);
 	}
+
+	cout << "PRIMARY FINISHED" << endl;
 }
 
 // condition ::= expression (("==" | ">" | ">=" | "<"| "<=") experssion)+
-void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<string> parameters) {
+void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "CONDITION\n";
 
 	expression(caller, parameters);
