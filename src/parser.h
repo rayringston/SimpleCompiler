@@ -193,6 +193,7 @@ class Parser {
 		TOKEN_TYPE unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 		TOKEN_TYPE primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 		void condition(string exitLabel, TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		TOKEN_TYPE functionCall(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 
 		Lexer& lexer;
 		Emitter& emitter;
@@ -255,6 +256,50 @@ void Parser::match(TOKEN_TYPE kind) {
 	nextToken();
 }
 
+
+TOKEN_TYPE Parser::functionCall(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
+	if (!functionMap.exists(curToken.text)) {
+		abort("Function " + curToken.text + " does not exist");
+	}
+
+	string branchIdentifier = curToken.text;
+	string bLabel = functionMap.getLabel(curToken.text);
+	TOKEN_TYPE returnType = functionMap.getReturnType(branchIdentifier);
+	int paramCount = 0;
+
+	cout << " (" + branchIdentifier + ")";
+	match(TOKEN_TYPE::IDENTIFIER);
+
+	if (checkToken(TOKEN_TYPE::WITH)) {
+		cout << "\nFUNCTIONCALL-PARAMETERS\n";
+		nextToken();
+		paramCount = 1;
+
+		expression(caller, parameters);
+		emitter.emitLine("str x11, [sp, #-8]!", caller);
+
+		while (checkToken(TOKEN_TYPE::COMMA)) {
+			match(TOKEN_TYPE::COMMA);
+			paramCount++;
+
+			expression(caller, parameters);
+			emitter.emitLine("str x11, [sp, #-8]!", caller);
+		}
+
+		if (paramCount % 2 != 0) {
+			emitter.emitLine("sub sp, sp, #8", caller);
+		}
+	}
+
+	int expectedParams = functionMap.getParams(branchIdentifier).size();
+	if (paramCount != expectedParams) {
+		abort("Function (" + branchIdentifier + ") expects " + to_string(expectedParams) + " parameters, only recieved " + to_string(paramCount));
+	}
+
+	emitter.emitLine("bl " + bLabel, caller);
+	return returnType;
+}
+
 // --------------- SYNTAX FUNCTIONS
 
 // Program is made of statements. Do each one until you reach the end
@@ -293,546 +338,262 @@ void Parser::program() {
 }
 
 void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
-	// Print statement
-	if (caller == TOKEN_TYPE::FUNC) { // -------------------------------------------------------------- IN-FUNCTION STATEMENTS	
-		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT - STRING | EXPRESSION - NL
-			cout << "FUNC-STATEMENT-PRINT\n";
-			
+	if (checkToken(TOKEN_TYPE::PRINT)) { // PRINT ( STRING | expression )
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-PRINT\n" : "STATEMENT-PRINT\n");
+
+		nextToken();
+		match(TOKEN_TYPE::LPARENTH);
+
+		if (checkToken(TOKEN_TYPE::STRING)) {
+			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) stringLiterals.push_back(curToken.text);
+
+			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+			emitter.emitLine("adr x0, S" + to_string(index), caller);
+			emitter.emitLine("ldr x1, =S" + to_string(index) + "_len", caller);
+			emitter.emitLine("bl print_str", caller);
+
 			nextToken();
-			match(TOKEN_TYPE::LPARENTH);
-
-			if (checkToken(TOKEN_TYPE::STRING)) { // String is for a literal, text is keyword to define variable
-				// check literals table for copy, add it if not.
-				if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) stringLiterals.push_back(curToken.text);
-
-				int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
-
-				emitter.functionLine("adr x0, S" + to_string(index));
-				emitter.functionLine("ldr x1, =S" + to_string(index) + "_len");
-				emitter.functionLine("bl print_str");
-
-				nextToken();
-			} else {
-				expression(caller, parameters);
-				emitter.functionLine("mov x0, x11");
-				emitter.functionLine("bl print_int");
-			}
-
-			match(TOKEN_TYPE::RPARENTH);
-
-		} else if (checkToken(TOKEN_TYPE::IF)) { // IF condition THEN statement ENDIF
-			int elseIfCount = 0;
-
-			cout << "STATEMENT-IF\n";
-			nextToken();
-			condition("XIF" + to_string(ifCount), caller, parameters);
-
-			match(TOKEN_TYPE::THEN);
-			nl();
-			while (!checkToken(TOKEN_TYPE::ENDIF) && !checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE)) {
-				statement(caller, parameters);
-			}
-			
-			emitter.functionLine("b XELSE" + to_string(ifCount));
-			emitter.functionLine("XIF" + to_string(ifCount) + ":");
-
-			while (checkToken(TOKEN_TYPE::ENDIF) == 0) {	
-				if (checkToken(TOKEN_TYPE::ELSEIF)) {
-					cout << "ELSEIF-BRANCH\n";	
-					nextToken();
-					condition("XELIF" + to_string(ifCount) + to_string(elseIfCount), caller, parameters);
-					
-					match(TOKEN_TYPE::THEN);
-					nl();
-
-					while (!checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE) && !checkToken(TOKEN_TYPE::ENDIF)) {
-						statement(caller, parameters);
-					}
-					
-					emitter.functionLine("b XELSE" + to_string(ifCount));
-					emitter.functionLine("XELIF" + to_string(ifCount) + to_string(elseIfCount) + ":");
-
-					elseIfCount++;
-				} else if (checkToken(TOKEN_TYPE::ELSE)) {
-					cout << "ELSE-BRANCH\n";
-					nextToken();
-					nl();
-
-					while (checkToken(TOKEN_TYPE::ENDIF) == 0) {
-						statement(caller, parameters);
-					}
-
-					break;
-				}
-
-			}
-			emitter.functionLine("XELSE" + to_string(ifCount) +  ":");
-
-			match(TOKEN_TYPE::ENDIF);	
-			
-			ifCount++;
-		} else if (checkToken(TOKEN_TYPE::WHILE)) { // WHILE condition DO statement ENDWHILE
-			cout << "FUNC-STATEMENT-WHILE\n";
-			nextToken();
-			emitter.functionLine("SWHILE" + to_string(whileCount) + ":");
-
-			condition("XWHILE" + to_string(whileCount), caller, parameters);
-			
-			match(TOKEN_TYPE::DO);
-			nl();
-
-			while (checkToken(TOKEN_TYPE::ENDWHILE) == 0) {
-				statement(caller, parameters);
-			}
-			match(TOKEN_TYPE::ENDWHILE);
-			
-			emitter.functionLine("B SWHILE" + to_string(whileCount)); 
-			emitter.functionLine("XWHILE" + to_string(whileCount) + ":");
-			whileCount++;
-
-		} else if (checkToken(TOKEN_TYPE::FUNC)) { // FUNC identifier IS nl {statement} ENDFUNC nl
-			abort("Cannot define a function inside of a function");
-		} else if (checkToken(TOKEN_TYPE::LABEL)) { // LABEL identifier
-			abort("Cannot put a label inside a function");
-		} else if (checkToken(TOKEN_TYPE::GOTO)) { // GOTO identifier
-			cout << "FUNC-STATEMENT-GOTO\n";
-			nextToken();
-			gotos.push_back(curToken.text); // add to the GOTOs list
-
-			emitter.functionLine("b L" + curToken.text);
-			match(TOKEN_TYPE::IDENTIFIER);
-		} else if (checkToken(TOKEN_TYPE::INT)) { // INT identifier = expression
-			cout << "FUNC-STATEMENT-INT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			}
-
-			symbolMap.pushBack(curToken.text, TOKEN_TYPE::INT);
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller, parameters);
-
-			emitter.functionLine("adr x13, " + identLabel);
-			emitter.functionLine("str x11, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::FLOAT)) { // FLOAT identifier = expression
-			cout << "FUNC-STATEMENT-FLOAT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			} else {
-				symbolMap.pushBack(curToken.text, TOKEN_TYPE::FLOAT);
-			}
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller, parameters);
-
-			emitter.functionLine("adr x13, " + identLabel);
-			emitter.functionLine("str x11, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::TEXT)) { // TEXT identifier = expression
-			cout << "FUNC-STATEMENT-TEXT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			} else {
-				symbolMap.pushBack(curToken.text, TOKEN_TYPE::TEXT);
-			}
-
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller, parameters);
-
-			emitter.functionLine("adr x13, " + identLabel);
-			emitter.functionLine("str x10, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) {// identifier "=" expression
-			cout << "FUNC-STATEMENT-ASSIGN\n";
-
-			if (!symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") does not exist.");
-			}
-
-			string identLabel = symbolMap.getLabel(curToken.text);
-			nextToken();
-
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller, parameters);
-
-			emitter.functionLine("adr x13, " + identLabel);
-			emitter.functionLine("str x11, [x13]");
-		
-		} else if (checkToken(TOKEN_TYPE::DO)) { // "DO" identifier
-			cout << "STATEMENT-FUNCTIONCALL";
-			nextToken();
-			cout << " (" + curToken.text + ")";
-			if (!functionMap.exists(curToken.text)) {
-				abort("Function " + curToken.text + " does not exist");
-			}
-				
-			string bLabel = functionMap.getLabel(curToken.text);
-
-			emitter.functionLine("bl " + bLabel);
-			match(TOKEN_TYPE::IDENTIFIER);
-		} else if (checkToken(TOKEN_TYPE::RET)) {
-			cout << "RETURN\n";
-			nextToken();
-
-			expression(caller, parameters);
-
-			emitter.functionLine("mov x9, x11");
-
 		} else {
-			abort("Invalid state at " + string(curToken.text) + " (" + tokenTypeToString(curToken.type) + ").");
+			expression(caller, parameters);
+			emitter.emitLine("mov x0, x11", caller);
+			emitter.emitLine("bl print_int", caller);
 		}
-	} else { // --------------------------------------------------------------------------------------------------- OUT-OF-FUNCTION STATEMENTS
-		if (checkToken(TOKEN_TYPE::PRINT)) { // Should be PRINT ( STRING | EXPRESSION ) NL
-			cout << "STATEMENT-PRINT\n";
-	
+
+		match(TOKEN_TYPE::RPARENTH);
+	} else if (checkToken(TOKEN_TYPE::IF)) { // IF condition THEN statement ENDIF
+		int elseIfCount = 0;
+
+		cout << "STATEMENT-IF\n";
+		nextToken();
+		condition("XIF" + to_string(ifCount), caller, parameters);
+
+		match(TOKEN_TYPE::THEN);
+		nl();
+		while (!checkToken(TOKEN_TYPE::ENDIF) && !checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE)) {
+			statement(caller, parameters);
+		}
+
+		emitter.emitLine("b XELSE" + to_string(ifCount), caller);
+		emitter.emitLine("XIF" + to_string(ifCount) + ":", caller);
+
+		while (checkToken(TOKEN_TYPE::ENDIF) == 0) {
+			if (checkToken(TOKEN_TYPE::ELSEIF)) {
+				cout << "ELSEIF-BRANCH\n";
+				nextToken();
+				condition("XELIF" + to_string(ifCount) + to_string(elseIfCount), caller, parameters);
+
+				match(TOKEN_TYPE::THEN);
+				nl();
+
+				while (!checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE) && !checkToken(TOKEN_TYPE::ENDIF)) {
+					statement(caller, parameters);
+				}
+
+				emitter.emitLine("b XELSE" + to_string(ifCount), caller);
+				emitter.emitLine("XELIF" + to_string(ifCount) + to_string(elseIfCount) + ":", caller);
+
+				elseIfCount++;
+			} else if (checkToken(TOKEN_TYPE::ELSE)) {
+				cout << "ELSE-BRANCH\n";
+				nextToken();
+				nl();
+
+				while (checkToken(TOKEN_TYPE::ENDIF) == 0) {
+					statement(caller, parameters);
+				}
+
+				break;
+			}
+		}
+		emitter.emitLine("XELSE" + to_string(ifCount) +  ":", caller);
+
+		match(TOKEN_TYPE::ENDIF);
+		ifCount++;
+	} else if (checkToken(TOKEN_TYPE::WHILE)) { // WHILE condition DO statement ENDWHILE
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-WHILE\n" : "STATEMENT-WHILE\n");
+		nextToken();
+		emitter.emitLine("SWHILE" + to_string(whileCount) + ":", caller);
+
+		condition("XWHILE" + to_string(whileCount), caller, parameters);
+
+		match(TOKEN_TYPE::DO);
+		nl();
+
+		while (checkToken(TOKEN_TYPE::ENDWHILE) == 0) {
+			statement(caller, parameters);
+		}
+		match(TOKEN_TYPE::ENDWHILE);
+
+		emitter.emitLine("B SWHILE" + to_string(whileCount), caller);
+		emitter.emitLine("XWHILE" + to_string(whileCount) + ":", caller);
+		whileCount++;
+	} else if (checkToken(TOKEN_TYPE::FUNC)) { // FUNC([INT | FLOAT | TEXT | none]) identifier IS nl {statement} ENDFUNC nl
+		if (caller == TOKEN_TYPE::FUNC) {
+			abort("Cannot define a function inside of a function");
+		}
+
+		cout << "STATEMENT-FUNCTION\n";
+		nextToken();
+
+		TOKEN_TYPE returnType = TOKEN_TYPE::INVALID;
+
+		if (checkToken(TOKEN_TYPE::LPARENTH)) {
 			nextToken();
-			match(TOKEN_TYPE::LPARENTH);
-			
-			if (checkToken(TOKEN_TYPE::STRING)) { // String is for a literal, text is keyword to define variable
-				// check literals table for copy, add it if not.
-				if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) stringLiterals.push_back(curToken.text);
 
-				int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
-
-				emitter.emitLine("adr x0, S" + to_string(index));
-				emitter.emitLine("ldr x1, =S" + to_string(index) + "_len");
-				emitter.emitLine("bl print_str");
-				
+			if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) {
+				returnType = curToken.type;
 				nextToken();
 			} else {
-				expression(caller);
-				emitter.emitLine("mov x0, x11");
-				emitter.emitLine("bl print_int");
+				abort("Expected return type for function, got " + tokenTypeToString(curToken.type));
 			}
-			
+
 			match(TOKEN_TYPE::RPARENTH);
+		}
 
-		} else if (checkToken(TOKEN_TYPE::IF)) {// IF condition THEN statement ENDIF
-			
+		if (functionMap.exists(curToken.text)) {
+			abort("Function (" + curToken.text + ") already exists");
+		}
 
-			
-			int elseIfCount = 0;
+		functionMap.push_name(curToken.text, returnType);
 
-			cout << "STATEMENT-IF\n";
+		string funcIdentifier = curToken.text;
+		string bLabel = functionMap.getLabel(curToken.text);
+		emitter.emitLine(bLabel + ":", TOKEN_TYPE::FUNC);
+		emitter.emitLine("stp fp, lr, [sp, #-16]!", TOKEN_TYPE::FUNC);
+
+		match(TOKEN_TYPE::IDENTIFIER);
+
+		vector<pair<string, TOKEN_TYPE>> params;
+
+		if (checkToken(TOKEN_TYPE::USING)) { // FUNC identifier USING [INT | FLOAT | TEXT] identifier {"," [INT | FLOAT | TEXT] identifier} IS ...
+			cout << "\tPARAMETERS\n";
 			nextToken();
-			condition("XIF" + to_string(ifCount), caller, parameters);
 
-			match(TOKEN_TYPE::THEN);
-			nl();
-			while (!checkToken(TOKEN_TYPE::ENDIF) && !checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE)) {
-				statement(caller, parameters);
+			if (curToken.type != TOKEN_TYPE::INT && curToken.type != TOKEN_TYPE::FLOAT && curToken.type != TOKEN_TYPE::TEXT) {
+				abort("Expected parameter type, got " + curToken.text);
 			}
-			
-			emitter.emitLine("b XELSE" + to_string(ifCount));
-			emitter.emitLine("XIF" + to_string(ifCount) + ":");
 
-			while (checkToken(TOKEN_TYPE::ENDIF) == 0) {	
-				if (checkToken(TOKEN_TYPE::ELSEIF)) {
-					cout << "ELSEIF-BRANCH\n";	
-					nextToken();
-					condition("XELIF" + to_string(ifCount) + to_string(elseIfCount), caller, parameters);
-					
-					match(TOKEN_TYPE::THEN);
-					nl();
-
-					while (!checkToken(TOKEN_TYPE::ELSEIF) && !checkToken(TOKEN_TYPE::ELSE) && !checkToken(TOKEN_TYPE::ENDIF)) {
-						statement(caller, parameters);
-					}
-					
-					emitter.emitLine("b XELSE" + to_string(ifCount));
-					emitter.emitLine("XELIF" + to_string(ifCount) + to_string(elseIfCount) + ":");
-
-					elseIfCount++;
-				} else if (checkToken(TOKEN_TYPE::ELSE)) {
-					cout << "ELSE-BRANCH\n";
-					nextToken();
-					nl();
-
-					while (checkToken(TOKEN_TYPE::ENDIF) == 0) {
-						statement(caller, parameters);
-					}
-
-					break;
-				}
-
-			}
-			emitter.emitLine("XELSE" + to_string(ifCount) +  ":");
-
-			match(TOKEN_TYPE::ENDIF);
-					
-			ifCount++;
-
-		} else if (checkToken(TOKEN_TYPE::WHILE)) { // WHILE condition DO statement ENDWHILE
-			cout << "STATEMENT-WHILE\n";
+			TOKEN_TYPE paramType = curToken.type;
 			nextToken();
-			emitter.emitLine("SWHILE" + to_string(whileCount) + ":");
 
-			condition("XWHILE" + to_string(whileCount), caller);
-			
-			match(TOKEN_TYPE::DO);
-			nl();
-
-			while (checkToken(TOKEN_TYPE::ENDWHILE) == 0) {
-				statement(caller);
-			}
-			match(TOKEN_TYPE::ENDWHILE);
-			
-			emitter.emitLine("B SWHILE" + to_string(whileCount)); 
-			emitter.emitLine("XWHILE" + to_string(whileCount) + ":");
-			whileCount++;
-
-		} else if (checkToken(TOKEN_TYPE::FUNC)) { // FUNC([INT | FLOAT | TEXT | none]) identifier IS nl {statement} ENDFUNC nl
-			cout << "STATEMENT-FUNCTION\n";
-			nextToken();
-			
-			TOKEN_TYPE returnType = TOKEN_TYPE::INVALID; // invalid for no return
-
-			if (checkToken(TOKEN_TYPE::LPARENTH)) {
-				nextToken();
-
-				if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) {
-					returnType = curToken.type;
-					nextToken();
-				} else {
-					abort("Expected return type for function, got " + tokenTypeToString(curToken.type));
-				}
-
-				match(TOKEN_TYPE::RPARENTH);
-			}
-
-			if (functionMap.exists(curToken.text)) {
-				abort("Function (" + curToken.text + ") already exists");
-			}
-
-			functionMap.push_name(curToken.text, returnType);
-
-			string funcIdentifier = curToken.text;
-			string bLabel = functionMap.getLabel(curToken.text);	
-			emitter.functionLine(bLabel + ":");
-
-			emitter.functionLine("stp fp, lr, [sp, #-16]!");
-
+			params.push_back({curToken.text, paramType});
 			match(TOKEN_TYPE::IDENTIFIER);
-			
-			vector<pair<string, TOKEN_TYPE>> params;
 
-			if (checkToken(TOKEN_TYPE::USING)) { // FUNC identifier USING [INT | FLOAT | TEXT]identifier {"," [INT | FLOAT | TEXT] identifier} IS ...
-				cout << "\tPARAMETERS\n";
-				nextToken();
+			while (checkToken(TOKEN_TYPE::IS) == 0) {
+				match(TOKEN_TYPE::COMMA);
 
 				if (curToken.type != TOKEN_TYPE::INT && curToken.type != TOKEN_TYPE::FLOAT && curToken.type != TOKEN_TYPE::TEXT) {
 					abort("Expected parameter type, got " + curToken.text);
 				}
 
-				TOKEN_TYPE paramType = curToken.type;
+				paramType = curToken.type;
 				nextToken();
+
+				if (find(params.begin(), params.end(), pair{curToken.text, paramType}) != params.end()) {
+					abort("Function parameter (" + curToken.text + ") already exists");
+				}
+
+				if (symbolMap.exists(curToken.text)) {
+					abort("Symbol (" + curToken.text + ") exists outside of the function");
+				}
 
 				params.push_back({curToken.text, paramType});
+
 				match(TOKEN_TYPE::IDENTIFIER);
-				
-				while (checkToken(TOKEN_TYPE::IS) == 0) {
-					match(TOKEN_TYPE::COMMA);
-					
-					if (curToken.type != TOKEN_TYPE::INT && curToken.type != TOKEN_TYPE::FLOAT && curToken.type != TOKEN_TYPE::TEXT) {
-						abort("Expected parameter type, got " + curToken.text);
-					}
-
-					paramType = curToken.type;
-					nextToken();
-
-					if (find(params.begin(), params.end(), pair{curToken.text, paramType}) != params.end()) {
-						abort("Function parameter (" + curToken.text + ") already exists");
-					}
-					
-					if (symbolMap.exists(curToken.text)) {
-						abort("Symbol (" + curToken.text + ") exists outside of the function");
-					}
-
-					params.push_back({curToken.text, paramType});
-
-					match(TOKEN_TYPE::IDENTIFIER);
-				}
-
-				functionMap.push_back(funcIdentifier, params);
 			}
 
-			match(TOKEN_TYPE::IS);
-			nl();
-
-			while (!checkToken(TOKEN_TYPE::ENDFUNC)) {
-				statement(TOKEN_TYPE::FUNC, params);
-			}
-
-			match(TOKEN_TYPE::ENDFUNC);
-			
-
-			emitter.functionLine("ldp fp, lr, [sp], #16");
-			
-			emitter.functionLine("add sp, sp, #" + to_string((params.size() + params.size() % 2) * 8));
-
-			emitter.functionLine("br lr");
-
-		} else if (checkToken(TOKEN_TYPE::LABEL)) { // LABEL identifier
-			cout << "STATEMENT-LABEL\n";
-			nextToken();
-
-			if (find(labels.begin(), labels.end(), curToken.text) != labels.end()) { // element exists if != to the end of labels
-				abort("Label (" + curToken.text + ") already exists"); 
-			}
-			labels.push_back(curToken.text);
-
-			emitter.emitLine("L" + curToken.text + ":");
-			match(TOKEN_TYPE::IDENTIFIER);
-		} else if (checkToken(TOKEN_TYPE::GOTO)) { // GOTO identifier
-			cout << "STATEMENT-GOTO\n";
-			nextToken();
-
-			gotos.push_back(curToken.text); // add to the GOTOs list
-
-			emitter.emitLine("b L" + curToken.text);
-			match(TOKEN_TYPE::IDENTIFIER);
-		} else if (checkToken(TOKEN_TYPE::INT)) { // INT identifier = expression
-			cout << "STATEMENT-INT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			}
-
-			symbolMap.pushBack(curToken.text, TOKEN_TYPE::INT);
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller);
-
-			emitter.emitLine("adr x13, " + identLabel);
-			emitter.emitLine("str x11, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::FLOAT)) { // FLOAT identifier = expression
-			cout << "STATEMENT-FLOAT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			} else {
-				symbolMap.pushBack(curToken.text, TOKEN_TYPE::FLOAT);
-			}
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller);
-
-			emitter.emitLine("adr x13, " + identLabel);
-			emitter.emitLine("str x11, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::TEXT)) { // TEXT identifier = expression
-			cout << "STATEMENT-TEXT\n";
-			nextToken();
-
-			if (symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") is already declared.");
-			} else {
-				symbolMap.pushBack(curToken.text, TOKEN_TYPE::TEXT);
-			}
-
-			string identLabel = symbolMap.getLabel(curToken.text);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller);
-
-			emitter.emitLine("adr x13, " + identLabel);
-			emitter.emitLine("str x10, [x13]");
-
-		} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) { // identifier "=" expression
-			cout << "STATEMENT-ASSIGN\n";
-
-			if (!symbolMap.exists(curToken.text)) {
-				abort("Symbol (" + curToken.text + ") does not exist.");
-			}
-
-			string identLabel = symbolMap.getLabel(curToken.text);
-			nextToken();
-
-			match(TOKEN_TYPE::EQ);
-
-			expression(caller);
-
-			emitter.emitLine("adr x13, " + identLabel);
-			emitter.emitLine("str x11, [x13]");
-		} else if (checkToken(TOKEN_TYPE::DO)) { // "DO" identifier
-			cout << "STATEMENT-FUNCTIONCALL";
-			nextToken();
-			cout << " (" + curToken.text + ")\n";
-			if (!functionMap.exists(curToken.text)) {
-				abort("Function " + curToken.text + " does not exist");
-			}
-			
-			string branchIdentifier = curToken.text;
-			string bLabel = functionMap.getLabel(curToken.text);
-			//emitter.emitLine("bl " + bLabel); dont do this yet
-			match(TOKEN_TYPE::IDENTIFIER);
-
-
-			if (checkToken(TOKEN_TYPE::WITH)) { // "DO" identifier "WITH" expression {"," expression}
-				cout << "\nFUNCTIONCALL-PARAMETERS\n";
-				nextToken();
-				
-				int paramCount = 1;
-				expression();
-
-				emitter.emitLine("str x11, [sp, #-8]!");
-
-				while (checkToken(TOKEN_TYPE::NEWLINE) == 0) {
-					match(TOKEN_TYPE::COMMA);
-					paramCount++;
-
-					expression();
-					emitter.emitLine("str x11, [sp, #-8]!");
-				}
-				
-				if (paramCount % 2 != 0) { // stack always has to be 16 aligned
-					emitter.emitLine("sub sp, sp, #8");			
-				}
-
-				if (paramCount != functionMap.getParams(branchIdentifier).size()) {
-					abort("Function (" + branchIdentifier + ") expects " + to_string(functionMap.getParams(branchIdentifier).size()) + " parameters, only recieved " + to_string(paramCount));
-				}
-			} else {
-				if (functionMap.getParams(branchIdentifier).size() != 0) {
-					abort("Function (" + branchIdentifier + ") expects arguments");
-				}
-			}
-
-			emitter.emitLine("bl " + bLabel);
-		} else {
-			abort("Invalid state at " + string(curToken.text) + " (" + tokenTypeToString(curToken.type) + ").");
+			functionMap.push_back(funcIdentifier, params);
 		}
+
+		match(TOKEN_TYPE::IS);
+		nl();
+
+		while (!checkToken(TOKEN_TYPE::ENDFUNC)) {
+			statement(TOKEN_TYPE::FUNC, params);
+		}
+
+		match(TOKEN_TYPE::ENDFUNC);
+
+		emitter.emitLine("ldp fp, lr, [sp], #16", TOKEN_TYPE::FUNC);
+		emitter.emitLine("add sp, sp, #" + to_string((params.size() + params.size() % 2) * 8), TOKEN_TYPE::FUNC);
+		emitter.emitLine("br lr", TOKEN_TYPE::FUNC);
+	} else if (checkToken(TOKEN_TYPE::LABEL)) { // LABEL identifier
+		if (caller == TOKEN_TYPE::FUNC) {
+			abort("Cannot put a label inside a function");
+		}
+
+		cout << "STATEMENT-LABEL\n";
+		nextToken();
+
+		if (find(labels.begin(), labels.end(), curToken.text) != labels.end()) {
+			abort("Label (" + curToken.text + ") already exists");
+		}
+		labels.push_back(curToken.text);
+
+		emitter.emitLine("L" + curToken.text + ":", caller);
+		match(TOKEN_TYPE::IDENTIFIER);
+	} else if (checkToken(TOKEN_TYPE::GOTO)) { // GOTO identifier
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-GOTO\n" : "STATEMENT-GOTO\n");
+		nextToken();
+
+		gotos.push_back(curToken.text);
+
+		emitter.emitLine("b L" + curToken.text, caller);
+		match(TOKEN_TYPE::IDENTIFIER);
+	} else if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) { // type identifier = expression
+		TOKEN_TYPE declarationType = curToken.type;
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-" : "STATEMENT-") << tokenTypeToString(declarationType) << "\n";
+		nextToken();
+
+		if (symbolMap.exists(curToken.text)) {
+			abort("Symbol (" + curToken.text + ") is already declared.");
+		}
+
+		symbolMap.pushBack(curToken.text, declarationType);
+		string identLabel = symbolMap.getLabel(curToken.text);
+
+		match(TOKEN_TYPE::IDENTIFIER);
+		match(TOKEN_TYPE::EQ);
+
+		expression(caller, parameters);
+
+		emitter.emitLine("adr x13, " + identLabel, caller);
+		emitter.emitLine(declarationType == TOKEN_TYPE::TEXT ? "str x10, [x13]" : "str x11, [x13]", caller);
+	} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) { // identifier = expression
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-ASSIGN\n" : "STATEMENT-ASSIGN\n");
+
+		if (!symbolMap.exists(curToken.text)) {
+			abort("Symbol (" + curToken.text + ") does not exist.");
+		}
+
+		string identLabel = symbolMap.getLabel(curToken.text);
+		nextToken();
+
+		match(TOKEN_TYPE::EQ);
+
+		expression(caller, parameters);
+
+		emitter.emitLine("adr x13, " + identLabel, caller);
+		emitter.emitLine("str x11, [x13]", caller);
+	} else if (checkToken(TOKEN_TYPE::DO)) { // DO identifier [WITH expression {"," expression}]
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-FUNCTIONCALL" : "STATEMENT-FUNCTIONCALL");
+		nextToken();
+		functionCall(caller, parameters);
+	} else if (checkToken(TOKEN_TYPE::RET)) {
+		if (caller != TOKEN_TYPE::FUNC) {
+			abort("Cannot return outside of a function");
+		}
+
+		cout << "RETURN\n";
+		nextToken();
+
+		expression(caller, parameters);
+
+		emitter.emitLine("mov x9, x11", caller);
+	} else {
+		abort("Invalid state at " + string(curToken.text) + " (" + tokenTypeToString(curToken.type) + ").");
 	}
-	
 
 	nl();
 }
@@ -853,8 +614,7 @@ TOKEN_TYPE Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>
 
 	TOKEN_TYPE lTermType = term(caller, parameters);
 
-	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x11, x10");
-	else emitter.emitLine("mov x11, x10");
+	emitter.emitLine("mov x11, x10", caller);
 
 	while (checkToken(TOKEN_TYPE::PLUS) || checkToken(TOKEN_TYPE::MINUS)) {
 		if (lTermType != TOKEN_TYPE::INT && lTermType != TOKEN_TYPE::FLOAT) {
@@ -871,11 +631,9 @@ TOKEN_TYPE Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>
 		}
 
 		if (lastType == TOKEN_TYPE::PLUS) { // +
-			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("add x11, x11, x10");
-			else emitter.emitLine("add x11, x11, x10");
+			emitter.emitLine("add x11, x11, x10", caller);
 		} else if (lastType == TOKEN_TYPE::MINUS) { // -
-			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("sub x11, x11, x10");
-			else emitter.emitLine("sub x11, x11, x10");
+			emitter.emitLine("sub x11, x11, x10", caller);
 		}
 	}
 
@@ -888,8 +646,7 @@ TOKEN_TYPE Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> para
 
 	TOKEN_TYPE lUnaryType = unary(caller, parameters); // hold each unary in r10. do operations on r9 and put the results in r10
 	
-	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x10, x9");
-	else emitter.emitLine("mov x10, x9");
+	emitter.emitLine("mov x10, x9", caller);
 
 
 	while (checkToken(TOKEN_TYPE::ASTERISK) || checkToken(TOKEN_TYPE::SLASH) || checkToken(TOKEN_TYPE::MODULO)) {
@@ -906,19 +663,12 @@ TOKEN_TYPE Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> para
 		}
 
 		if (lastType == TOKEN_TYPE::ASTERISK) { 	// multiply
-			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mul x10, x10, x9");
-			else emitter.emitLine("mul x10, x10, x9");
+			emitter.emitLine("mul x10, x10, x9", caller);
 		} else if (lastType == TOKEN_TYPE::SLASH) { // divide
-			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("sdiv x10, x10, x9");
-			else emitter.emitLine("sdiv x10, x10, x9");
+			emitter.emitLine("sdiv x10, x10, x9", caller);
 		} else {
-			if (caller == TOKEN_TYPE::FUNC) {
-				emitter.functionLine("udiv x8, x10, x9");  		// x10 is dividend x9 is divisor x8 is quotient
-				emitter.functionLine("msub x10, x8, x9, x10");		// q = Dvnd / Dvsr + Rem -> REm = Q * 
-			} else {							// x10 = x10 - (x9 * x10) = x10 -
-				emitter.emitLine("udiv x8, x10, x9");
-				emitter.emitLine("msub x10, x8, x9, x10");
-			}
+			emitter.emitLine("udiv x8, x10, x9", caller);
+			emitter.emitLine("msub x10, x8, x9, x10", caller);
 		}
 	}
 
@@ -944,8 +694,7 @@ TOKEN_TYPE Parser::unary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> par
 	}
 
 	if (lastType == TOKEN_TYPE::MINUS) {
-		if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mvn x9, x9");
-		else emitter.emitLine("mvn x9, x9");
+		emitter.emitLine("mvn x9, x9", caller);
 	}
 
 	return primaryType;
@@ -958,8 +707,7 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 
 
 	if (checkToken(TOKEN_TYPE::NUMBER)) {
-		if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x9, #" + curToken.text);
-		else emitter.emitLine("mov x9, #" + curToken.text);
+		emitter.emitLine("mov x9, #" + curToken.text, caller);
 		nextToken();
 
 		type = TOKEN_TYPE::INT;
@@ -971,7 +719,7 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 					for (auto p : parameters) {
 						if (p.first == curToken.text) {
 							type = p.second;
-							emitter.functionLine("ldr x9, [sp, " + functionMap.getParamOffset(parameters, curToken.text) + "]");
+							emitter.emitLine("ldr x9, [sp, " + functionMap.getParamOffset(parameters, curToken.text) + "]", caller);
 							break;
 						}
 					}
@@ -980,8 +728,8 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 							abort("Symbol (" + curToken.text + ") does not exist.");
 						} else {
 							type = symbolMap.getType(curToken.text);
-							emitter.functionLine("adr x9, " + symbolMap.getLabel(curToken.text));
-							emitter.functionLine("ldr x9, [x9]");	
+							emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text), caller);
+							emitter.emitLine("ldr x9, [x9]", caller);	
 						}
 					}
 				}
@@ -989,53 +737,15 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 			
 			else if (symbolMap.exists(curToken.text)) { // variable
 				type = symbolMap.getType(curToken.text);
-				emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text));
-				emitter.emitLine("ldr x9, [x9]");
+				emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text), caller);
+				emitter.emitLine("ldr x9, [x9]", caller);
 			} else {
 				abort("Symbol (" + curToken.text + ") does not exist.");
 			}
 
 			nextToken();
 		} else { // must be a function call
-			string branchIdentifier = curToken.text;
-			string bLabel = functionMap.getLabel(curToken.text);
-			//emitter.emitLine("bl " + bLabel); dont do this yet
-
-			type = functionMap.getReturnType(branchIdentifier);
-
-			match(TOKEN_TYPE::IDENTIFIER);
-
-
-			if (checkToken(TOKEN_TYPE::WITH)) { // "DO" identifier "WITH" expression {"," expression}
-				cout << "\nFUNCTIONCALL-PARAMETERS\n";
-				nextToken();
-				
-				int paramCount = 1;
-				expression();
-
-				emitter.emitLine("str x11, [sp, #-8]!");
-
-				while (checkToken(TOKEN_TYPE::NEWLINE) == 0) {
-					match(TOKEN_TYPE::COMMA);
-					paramCount++;
-
-					expression();
-					emitter.emitLine("str x11, [sp, #-8]!");
-				}
-				
-				if (paramCount % 2 != 0) { // stack always has to be 16 aligned
-					emitter.emitLine("sub sp, sp, #8");			
-				}
-
-				if (paramCount != functionMap.getParams(branchIdentifier).size()) {
-					abort("Function (" + branchIdentifier + ") expects " + to_string(functionMap.getParams(branchIdentifier).size()) + " parameters, only recieved " + to_string(paramCount));
-				}
-			} else {
-				if (functionMap.getParams(branchIdentifier).size() != 0) {
-					abort("Function (" + branchIdentifier + ") expects arguments");
-				}
-			}
-			emitter.emitLine("bl " + bLabel);	
+			type = functionCall(caller, parameters);
 		}
 	} else {
 		abort("Expected number or identifier, recieved " + curToken.text);
@@ -1050,8 +760,7 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 
 	expression(caller, parameters);
 	// result in r11
-	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x12, x11");
-	else emitter.emitLine("mov x12, x11");
+	emitter.emitLine("mov x12, x11", caller);
 
 	TOKEN_TYPE conditional = curToken.type;
 
@@ -1062,8 +771,7 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 		abort("Expected expression, got " + curToken.text);
 	}
 	
-	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("cmp x12, x11");
-	else emitter.emitLine("cmp x12, x11");
+	emitter.emitLine("cmp x12, x11", caller);
 
 	string branchType = "";
 
@@ -1088,8 +796,7 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 			break;
 	}
 
-	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine(branchType + exitLabel);
-	else emitter.emitLine(branchType + exitLabel);
+	emitter.emitLine(branchType + exitLabel, caller);
 
 	/* -------------- Currently removed multiple expressions w/i a condition
 	while (checkToken(TOKEN_TYPE::EQEQ) || checkToken(TOKEN_TYPE::GT) || checkToken(TOKEN_TYPE::GTEQ) || checkToken(TOKEN_TYPE::LT) || checkToken(TOKEN_TYPE::LTEQ)) {

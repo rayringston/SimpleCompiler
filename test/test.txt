@@ -1,3 +1,7 @@
+FUNC test IS
+PRINT("TEST")
+ENDFUNC
+
 INT x = 10
 TEXT str = 10
-PRINT(x + str)
+DO test

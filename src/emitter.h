@@ -1,6 +1,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include "lexer.h"
 
 
 #ifndef EMITTER_H
@@ -13,6 +14,7 @@ class Emitter {
 		Emitter();
 		void emit(string codeIn);
 		void emitLine(string codeIn);
+		void emitLine(string codeIn, TOKEN_TYPE caller);
 		void headerLine(string codeIn);
 		void dataLine(string codeIn);
 		void functionLine(string codeIn);
@@ -56,6 +58,11 @@ void Emitter::emit(string codeIn) {
 
 void Emitter::emitLine (string codeIn) { 
 	code += codeIn + "\n";
+}
+
+void Emitter::emitLine(string codeIn, TOKEN_TYPE caller) {
+	if (caller == TOKEN_TYPE::FUNC) functionLine(codeIn);
+	else emitLine(codeIn);
 }
 
 void Emitter::headerLine(string codeIn) {
