@@ -1,1 +1,2 @@
-PRINT 0
+TEXT x = "abc"
+PRINT x

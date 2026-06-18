@@ -274,11 +274,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 				int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
 
-				emitter.functionLine("mov x0, #1");
-				emitter.functionLine("adr x1, S" + to_string(index));
-				emitter.functionLine("ldr x2, =S" + to_string(index) + "_len");
-				emitter.functionLine("mov x8, #64");
-				emitter.functionLine("svc #0");
+				emitter.functionLine("adr x0, S" + to_string(index));
+				emitter.functionLine("ldr x1, =S" + to_string(index) + "_len");
+				emitter.functionLine("bl print_str");
 
 				nextToken();
 			} else {
@@ -476,12 +474,10 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 
 				int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
 
-				emitter.emitLine("mov x0, #1");
-				emitter.emitLine("adr x1, S" + to_string(index));
-				emitter.emitLine("ldr x2, =S" + to_string(index) + "_len");
-				emitter.emitLine("mov x8, #64");
-				emitter.emitLine("svc #0");
-
+				emitter.emitLine("adr x0, S" + to_string(index));
+				emitter.emitLine("ldr x1, =S" + to_string(index) + "_len");
+				emitter.emitLine("bl print_str");
+				
 				nextToken();
 			} else {
 				expression(caller);
