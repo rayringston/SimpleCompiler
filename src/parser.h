@@ -22,6 +22,13 @@ class FunctionMap {
 			return 0;
 		}
 
+		TOKEN_TYPE getReturnType(string name) { // helper function to get the return type of a function
+			for (auto function : functions) {
+				if (function.first == name) return function.second;
+			}
+			return TOKEN_TYPE::INVALID; // should never get here if you check for existence first
+		}
+
 		int paramExists(string name, string param, TOKEN_TYPE type) { // check to see a param is already defined -- maybe not useful
 			for (int i = 0; i < paramMap.size(); i++) {
 				if (paramMap[i].name == name) {
@@ -181,10 +188,10 @@ class Parser {
 		void program();
 		void statement(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 		void nl();
-		void expression(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
-		void term(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
-		void unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
-		void primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		TOKEN_TYPE expression(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		TOKEN_TYPE term(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		TOKEN_TYPE unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
+		TOKEN_TYPE primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 		void condition(string exitLabel, TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<pair<string, TOKEN_TYPE>> parameters = {});
 
 		Lexer& lexer;
@@ -841,19 +848,27 @@ void Parser::nl() {
 }
 
 // expression ::= term {("+" | "/") term}
-void Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
+TOKEN_TYPE Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "EXPRESSION\n";
 
-	term(caller, parameters);
+	TOKEN_TYPE lTermType = term(caller, parameters);
 
 	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x11, x10");
 	else emitter.emitLine("mov x11, x10");
 
 	while (checkToken(TOKEN_TYPE::PLUS) || checkToken(TOKEN_TYPE::MINUS)) {
+		if (lTermType != TOKEN_TYPE::INT && lTermType != TOKEN_TYPE::FLOAT) {
+			abort("Cannot apply operator (" + tokenTypeToString(curToken.type) + ") to non-numeric type (" + tokenTypeToString(lTermType) + ").");
+		}
+	
 		TOKEN_TYPE lastType = curToken.type;
 
 		nextToken();
-		term(caller, parameters);
+		TOKEN_TYPE currTermType = term(caller, parameters);
+
+		if (lTermType != currTermType) {
+			abort("Cannot apply operator (" + tokenTypeToString(lastType) + ") to different types (" + tokenTypeToString(lTermType) + " and " + tokenTypeToString(currTermType) + ").");
+		}
 
 		if (lastType == TOKEN_TYPE::PLUS) { // +
 			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("add x11, x11, x10");
@@ -863,22 +878,32 @@ void Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> para
 			else emitter.emitLine("sub x11, x11, x10");
 		}
 	}
+
+	return lTermType;
 }
 
 // term ::= unary {("*" | "/") unary}
-void Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
+TOKEN_TYPE Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "TERM\n";
 
-	unary(caller, parameters); // hold each unary in r10. do operations on r9 and put the results in r10
+	TOKEN_TYPE lUnaryType = unary(caller, parameters); // hold each unary in r10. do operations on r9 and put the results in r10
 	
 	if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x10, x9");
 	else emitter.emitLine("mov x10, x9");
 
 
 	while (checkToken(TOKEN_TYPE::ASTERISK) || checkToken(TOKEN_TYPE::SLASH) || checkToken(TOKEN_TYPE::MODULO)) {
+		if (lUnaryType != TOKEN_TYPE::INT && lUnaryType != TOKEN_TYPE::FLOAT) {
+			abort("Cannot apply operator (" + tokenTypeToString(curToken.type) + ") to non-numeric type (" + tokenTypeToString(lUnaryType) + ").");
+		}
+
 		TOKEN_TYPE lastType = curToken.type;
 		nextToken();
-		unary(caller, parameters);
+		TOKEN_TYPE currUnaryType = unary(caller, parameters);
+
+		if (lUnaryType != currUnaryType) {
+			abort("Cannot apply operator (" + tokenTypeToString(lastType) + ") to different types (" + tokenTypeToString(lUnaryType) + " and " + tokenTypeToString(currUnaryType) + ").");
+		}
 
 		if (lastType == TOKEN_TYPE::ASTERISK) { 	// multiply
 			if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mul x10, x10, x9");
@@ -896,10 +921,12 @@ void Parser::term(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters
 			}
 		}
 	}
+
+	return lUnaryType;
 }
 
 // unary ::= ["+" | "-"] primary
-void Parser::unary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
+TOKEN_TYPE Parser::unary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "UNARY\n";
 
 	TOKEN_TYPE lastType = curToken.type;
@@ -908,16 +935,24 @@ void Parser::unary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameter
 	if (curToken.type == TOKEN_TYPE::PLUS || curToken.type == TOKEN_TYPE::MINUS) {
 		nextToken();
 	}
-	primary(caller, parameters);
+	TOKEN_TYPE primaryType = primary(caller, parameters);
+
+	if (primaryType != TOKEN_TYPE::INT && primaryType != TOKEN_TYPE::FLOAT) {
+		if (lastType == TOKEN_TYPE::PLUS || lastType == TOKEN_TYPE::MINUS) {
+			abort("Cannot apply unary (" + tokenTypeToString(lastType) + ") to non-numeric type (" + curToken.text + ").");
+		}
+	}
 
 	if (lastType == TOKEN_TYPE::MINUS) {
 		if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mvn x9, x9");
 		else emitter.emitLine("mvn x9, x9");
 	}
+
+	return primaryType;
 }
 
 // primary ::= number | identifier
-void Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) { // Primary held in r9
+TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) { // Primary held in r9
 	cout << "PRIMARY (" << curToken.text << ")\n";
 	TOKEN_TYPE type = TOKEN_TYPE::INVALID;
 
@@ -965,6 +1000,9 @@ void Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> paramet
 			string branchIdentifier = curToken.text;
 			string bLabel = functionMap.getLabel(curToken.text);
 			//emitter.emitLine("bl " + bLabel); dont do this yet
+
+			type = functionMap.getReturnType(branchIdentifier);
+
 			match(TOKEN_TYPE::IDENTIFIER);
 
 
@@ -1003,7 +1041,7 @@ void Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> paramet
 		abort("Expected number or identifier, recieved " + curToken.text);
 	}
 
-	cout << "PRIMARY FINISHED" << endl;
+	return type;
 }
 
 // condition ::= expression (("==" | ">" | ">=" | "<"| "<=") experssion)+
