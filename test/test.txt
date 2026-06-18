@@ -1,2 +1,2 @@
 INT x = 10
-PRINT(x)
+TEXT str = "abc"

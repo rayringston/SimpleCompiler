@@ -2,6 +2,7 @@
 #include "emitter.h"
 #include <vector>
 #include <algorithm>
+#include <utility>
 
 using namespace std;
 
@@ -104,8 +105,18 @@ class SymbolMap {
 			// X31		: 0
 		}
 
+		TOKEN_TYPE getType(string name) {
+			for (auto symbol : symbols) {
+				if (symbol.first == name) return symbol.second;
+			}
+			return TOKEN_TYPE::INVALID;
+		}
+
+
 		string getLabel(string name) {
-			int index = find(symbols.begin(), symbols.end(), name) - symbols.begin();
+			TOKEN_TYPE type = getType(name);
+	
+			int index = find(symbols.begin(), symbols.end(), pair{name, type}) - symbols.begin();
 
 			return "V" + to_string(index);
 		}
@@ -113,14 +124,17 @@ class SymbolMap {
 		string getLabel(int index) {
 			return "V" + to_string(index);
 		}
-
+		
 		int exists(string name) {
-			if (find(symbols.begin(), symbols.end(), name) == symbols.end()) return 0; // doesn't exist
+			TOKEN_TYPE type = getType(name);
+			if (type == TOKEN_TYPE::INVALID) return 0;
+
+			if (find(symbols.begin(), symbols.end(), pair{name, type}) == symbols.end()) return 0; // doesn't exist
 			else return 1; // exists
 		}
 
-		void push_back(string name) {
-			symbols.push_back(name);
+		void pushBack(string name, TOKEN_TYPE type) {
+			symbols.push_back({name, type});
 		}
 
 		int size() {
@@ -140,8 +154,7 @@ class SymbolMap {
 			
 		}
 */
-		vector<string> symbols; // symbols contains the names of all variables defined in the program
-
+		vector<pair<string, TOKEN_TYPE>> symbols; // symbols contains a pair of the name of every symbol used, and it's type
 		vector<string> registers; // 
 };
 
@@ -160,7 +173,7 @@ class Parser {
 		void expression(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
 		void term(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
 		void unary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
-		void primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
+		TOKEN_TYPE primary(TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
 		void condition(string exitLabel, TOKEN_TYPE caller = TOKEN_TYPE::INVALID, vector<string> parameters = {});
 
 		Lexer& lexer;
@@ -378,7 +391,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			}
 
-			symbolMap.push_back(curToken.text);
+			symbolMap.pushBack(curToken.text, TOKEN_TYPE::INT);
 			string identLabel = symbolMap.getLabel(curToken.text);
 
 			match(TOKEN_TYPE::IDENTIFIER);
@@ -396,7 +409,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			if (symbolMap.exists(curToken.text)) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			} else {
-				symbolMap.push_back(curToken.text);
+				symbolMap.pushBack(curToken.text, TOKEN_TYPE::FLOAT);
 			}
 			string identLabel = symbolMap.getLabel(curToken.text);
 
@@ -415,7 +428,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			if (symbolMap.exists(curToken.text)) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			} else {
-				symbolMap.push_back(curToken.text);
+				symbolMap.pushBack(curToken.text, TOKEN_TYPE::TEXT);
 			}
 
 			string identLabel = symbolMap.getLabel(curToken.text);
@@ -657,7 +670,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			}
 
-			symbolMap.push_back(curToken.text);
+			symbolMap.pushBack(curToken.text, TOKEN_TYPE::INT);
 			string identLabel = symbolMap.getLabel(curToken.text);
 
 			match(TOKEN_TYPE::IDENTIFIER);
@@ -675,7 +688,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			if (symbolMap.exists(curToken.text)) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			} else {
-				symbolMap.push_back(curToken.text);
+				symbolMap.pushBack(curToken.text, TOKEN_TYPE::FLOAT);
 			}
 			string identLabel = symbolMap.getLabel(curToken.text);
 
@@ -694,7 +707,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<string> parameters) {
 			if (symbolMap.exists(curToken.text)) {
 				abort("Symbol (" + curToken.text + ") is already declared.");
 			} else {
-				symbolMap.push_back(curToken.text);
+				symbolMap.pushBack(curToken.text, TOKEN_TYPE::TEXT);
 			}
 
 			string identLabel = symbolMap.getLabel(curToken.text);
@@ -864,13 +877,17 @@ void Parser::unary(TOKEN_TYPE caller, vector<string> parameters) {
 }
 
 // primary ::= number | identifier
-void Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Primary held in r9
+TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Primary held in r9
 	cout << "PRIMARY (" << curToken.text << ")\n";
+	TOKEN_TYPE type = TOKEN_TYPE::INVALID;
+
 
 	if (checkToken(TOKEN_TYPE::NUMBER)) {
 		if (caller == TOKEN_TYPE::FUNC) emitter.functionLine("mov x9, #" + curToken.text);
 		else emitter.emitLine("mov x9, #" + curToken.text);
 		nextToken();
+
+		type = TOKEN_TYPE::INT;
 	} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) {
 		if (!symbolMap.exists(curToken.text) && find(parameters.begin(), parameters.end(), curToken.text) == parameters.end() && !functionMap.exists(curToken.text)) {
 			// doesn't exist as a variable, parameter, or label
@@ -879,6 +896,8 @@ void Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Primary 
 
 			if (caller == TOKEN_TYPE::FUNC) {
 				 if (!parameters.empty()) { // parameter
+					type = TOKEN_TYPE::INT;
+
 					if (find(parameters.begin(), parameters.end(), curToken.text) != parameters.end()) {
 						emitter.functionLine("ldr x9, [sp, " + functionMap.getParamOffset(parameters, curToken.text) + "]");
 					} else {
@@ -889,6 +908,7 @@ void Parser::primary(TOKEN_TYPE caller, vector<string> parameters) { // Primary 
 			}
 			
 			else { // variable
+				type = symbolMap.getType(curToken.text);
 				emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text));
 				emitter.emitLine("ldr x9, [x9]");
 			}
