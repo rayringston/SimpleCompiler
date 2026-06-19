@@ -48,6 +48,3 @@ svc #0
 add sp, sp, #32
 
 ret
-
-
-
