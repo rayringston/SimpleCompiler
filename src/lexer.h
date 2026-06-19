@@ -37,8 +37,12 @@ enum TOKEN_TYPE : int {
 	PRINT,
 	LABEL,
 	GOTO,
+	// Built-in Functions
+	LEN = 201,
+	SUBSTR,
+		// ...
 	// Operators
-	EQ = 201,
+	EQ = 301,
 	PLUS,
 	MINUS,
 	ASTERISK,
@@ -89,6 +93,10 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case PRINT: return "PRINT";
 		case LABEL: return "LABEL";
 		case GOTO: return "GOTO";
+		// BUILT-IN FUNCTIONS
+		case LEN: return "LEN";
+		case SUBSTR: return "SUBSTR";
+
 		// OPERATORS
 		case EQ: return "EQ";
 		case PLUS: return "PLUS";
@@ -147,6 +155,8 @@ class Token {
 			else if (tokenText == "USING") return USING;
 			else if (tokenText == "ENDFUNC") return ENDFUNC;
 			else if (tokenText == "RET") return RET;
+			else if (tokenText == "LEN") return LEN;
+			else if (tokenText == "SUBSTR") return SUBSTR;
 			else return INVALID;
 		}
 };

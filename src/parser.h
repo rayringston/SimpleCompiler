@@ -566,6 +566,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 		}
 
 		emitter.emitLine("adr x13, " + identLabel, caller);
+		emitter.emitLine("str x11, [x13]", caller);
 	} else if (checkToken(TOKEN_TYPE::TEXT)) { // TEXT identifier = STRING | expression
 		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-TEXT\n" : "STATEMENT-TEXT\n");
 		nextToken();
@@ -607,13 +608,16 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 			abort("Symbol (" + curToken.text + ") does not exist.");
 		}
 
-		string identLabel = symbolMap.getLabel(curToken.text);
+		string identName = curToken.text;
+		TOKEN_TYPE identType = symbolMap.getType(identName);
+		string identLabel = symbolMap.getLabel(identName);
 		nextToken();
 
 		match(TOKEN_TYPE::EQ);
 
-		if (expression(caller, parameters) != symbolMap.getType(curToken.text)) {
-			abort("Cannot assign value of type (" + tokenTypeToString(expression(caller, parameters)) + ") to variable of type (" + tokenTypeToString(symbolMap.getType(curToken.text)) + ").");
+		TOKEN_TYPE expressionType = expression(caller, parameters);
+		if (expressionType != identType) {
+			abort("Cannot assign value of type (" + tokenTypeToString(expressionType) + ") to variable of type (" + tokenTypeToString(identType) + ").");
 		}
 
 		emitter.emitLine("adr x13, " + identLabel, caller);
@@ -790,8 +794,38 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		} else { // must be a function call
 			type = functionCall(caller, parameters);
 		}
+	} else if (checkToken(TOKEN_TYPE::LEN)) { // built-in LEN function
+		nextToken();
+
+		type = TOKEN_TYPE::INT;
+		match(TOKEN_TYPE::LPARENTH);
+
+		if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
+			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
+				stringLiterals.push_back(curToken.text);
+			}
+
+			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+			emitter.emitLine("adr x9, S" + to_string(index), caller);
+			emitter.emitLine("ldr x9, [x9]", caller);
+			emitter.emitLine("bl str_len", caller);
+			emitter.emitLine("mov x9, x0", caller);
+
+			nextToken();
+		} else { // input is an expression, of TEXT type
+			if (expression(caller, parameters) != TOKEN_TYPE::TEXT) {
+				abort("LEN function expects type (TEXT), got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+			}
+
+			emitter.emitLine("mov x0, x11", caller);
+			emitter.emitLine("bl str_len", caller);
+			emitter.emitLine("mov x9, x0", caller);
+		}
+
+		match(TOKEN_TYPE::RPARENTH);
 	} else {
-		abort("Expected number or identifier, recieved " + curToken.text);
+		abort("Unexpected token (" + curToken.text + ") of type (" + tokenTypeToString(curToken.type) + ") in primary.");
 	}
 
 	return type;

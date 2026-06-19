@@ -1,10 +1,11 @@
-TEXT str1 = "hello world\n"
-TEXT str2 = "hello world\n"
-TEXT str3 = "abc\n"
+TEXT str = "hello world\n"
 
-TEXT copy = str1
+INT l = LEN(str)
 
-PRINT(str1)
-PRINT(str2)
-PRINT(str3)
-PRINT(copy)
+WHILE l > 0 DO
+
+PRINT(l)
+l = l - 1
+
+ENDWHILE
+
