@@ -1,7 +1,10 @@
-FUNC test IS
-PRINT("TEST")
-ENDFUNC
+TEXT str1 = "hello world\n"
+TEXT str2 = "hello world\n"
+TEXT str3 = "abc\n"
 
-INT x = 10
-TEXT str = 10
-DO test
+TEXT copy = str1
+
+PRINT(str1)
+PRINT(str2)
+PRINT(str3)
+PRINT(copy)

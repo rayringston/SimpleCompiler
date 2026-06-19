@@ -316,9 +316,9 @@ void Parser::program() {
 		statement();
 	}
 
-	for (int i = 0; i < gotos.size(); i++) {
-		if (find(labels.begin(), labels.end(), gotos[i]) == labels.end()) {
-			abort("Attemping to GOTO undeclared label, " + gotos[i]);
+	for (auto g : gotos) {
+		if (find(labels.begin(), labels.end(), g) == labels.end()) {
+			abort("Attemping to GOTO undeclared label, " + g);
 		}
 	}
 
@@ -332,9 +332,7 @@ void Parser::program() {
 		emitter.dataLine(label + "_len = . - " + label);
 	}
 
-	emitter.emitLine("mov x8, #93");
-	emitter.emitLine("mov x0, #0");
-	emitter.emitLine("svc #0");
+	emitter.emitLine("bl exit");
 }
 
 void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
@@ -355,9 +353,16 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 
 			nextToken();
 		} else {
-			expression(caller, parameters);
+			TOKEN_TYPE type = expression(caller, parameters);
 			emitter.emitLine("mov x0, x11", caller);
-			emitter.emitLine("bl print_int", caller);
+
+			if (type == TOKEN_TYPE::FLOAT) {
+				emitter.emitLine("bl print_int", caller);
+			} else if (type == TOKEN_TYPE::TEXT) {
+				emitter.emitLine("bl print_cstr", caller);
+			} else if (type == TOKEN_TYPE::INT) {
+				emitter.emitLine("bl print_int", caller);
+			}
 		}
 
 		match(TOKEN_TYPE::RPARENTH);
@@ -541,7 +546,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 
 		emitter.emitLine("b L" + curToken.text, caller);
 		match(TOKEN_TYPE::IDENTIFIER);
-	} else if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) { // type identifier = expression
+	} else if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT)) { // type identifier = expression
 		TOKEN_TYPE declarationType = curToken.type;
 		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-" : "STATEMENT-") << tokenTypeToString(declarationType) << "\n";
 		nextToken();
@@ -556,10 +561,45 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 		match(TOKEN_TYPE::IDENTIFIER);
 		match(TOKEN_TYPE::EQ);
 
-		expression(caller, parameters);
+		if (expression(caller, parameters) != declarationType) {
+			abort("Cannot assign value of type (" + tokenTypeToString(expression(caller, parameters)) + ") to variable of type (" + tokenTypeToString(declarationType) + ").");
+		}
 
 		emitter.emitLine("adr x13, " + identLabel, caller);
-		emitter.emitLine(declarationType == TOKEN_TYPE::TEXT ? "str x10, [x13]" : "str x11, [x13]", caller);
+	} else if (checkToken(TOKEN_TYPE::TEXT)) { // TEXT identifier = STRING | expression
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-TEXT\n" : "STATEMENT-TEXT\n");
+		nextToken();
+
+		if (symbolMap.exists(curToken.text)) { // make sure the symbol doesn't already exist
+			abort("Symbol (" + curToken.text + ") is already declared.");
+		}
+
+		symbolMap.pushBack(curToken.text, TOKEN_TYPE::TEXT); // add the new symbol, type of TEXT
+		string identLabel = symbolMap.getLabel(curToken.text);
+
+		match(TOKEN_TYPE::IDENTIFIER);
+		match(TOKEN_TYPE::EQ);
+
+		if (checkToken(TOKEN_TYPE::STRING)) { // = STRING
+			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
+				stringLiterals.push_back(curToken.text);
+			}
+
+			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+			emitter.emitLine("adr x13, " + identLabel, caller);
+			emitter.emitLine("adr x11, S" + to_string(index), caller);
+			emitter.emitLine("str x11, [x13]", caller);
+
+			nextToken();
+		} else {
+			if (expression(caller, parameters) != TOKEN_TYPE::TEXT) {
+				abort("Cannot assign value of type (" + tokenTypeToString(expression(caller, parameters)) + ") to variable of type (TEXT).");
+			}
+
+			emitter.emitLine("adr x13, " + identLabel, caller);
+			emitter.emitLine("str x11, [x13]", caller);
+		}
 	} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) { // identifier = expression
 		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-ASSIGN\n" : "STATEMENT-ASSIGN\n");
 
@@ -572,7 +612,9 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 
 		match(TOKEN_TYPE::EQ);
 
-		expression(caller, parameters);
+		if (expression(caller, parameters) != symbolMap.getType(curToken.text)) {
+			abort("Cannot assign value of type (" + tokenTypeToString(expression(caller, parameters)) + ") to variable of type (" + tokenTypeToString(symbolMap.getType(curToken.text)) + ").");
+		}
 
 		emitter.emitLine("adr x13, " + identLabel, caller);
 		emitter.emitLine("str x11, [x13]", caller);
@@ -724,19 +766,20 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 						}
 					}
 					if (type == TOKEN_TYPE::INVALID) { // not a parameter, check if variable in symbol table
-						 if (!symbolMap.exists(curToken.text)) {
+						if (!symbolMap.exists(curToken.text)) {
 							abort("Symbol (" + curToken.text + ") does not exist.");
-						} else {
-							type = symbolMap.getType(curToken.text);
-							emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text), caller);
-							emitter.emitLine("ldr x9, [x9]", caller);	
 						}
+
+						type = symbolMap.getType(curToken.text);
+						emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text), caller);
+						emitter.emitLine("ldr x9, [x9]", caller);	
 					}
 				}
 			}
 			
 			else if (symbolMap.exists(curToken.text)) { // variable
 				type = symbolMap.getType(curToken.text);
+
 				emitter.emitLine("adr x9, " + symbolMap.getLabel(curToken.text), caller);
 				emitter.emitLine("ldr x9, [x9]", caller);
 			} else {
