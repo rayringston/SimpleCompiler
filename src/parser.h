@@ -805,38 +805,3 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 	}
 	*/
 }
-
-/* --------------- GRAMMAR RULES
-
-{program} ::= 		{statement}
-{statement} ::= 	"PRINT" (expression | string) nl
-			
-			"IF" condition "THEN" nl 
-				{statement}
-			["ELSE"
-				{statement}
-			]
-			"ENDIF" nl
-
-			"WHILE" condition "DO" nl {statement} "ENDWHILE" nl
-
-			"LABEL" identifier nl
-			"GOTO" identifier nl
-			"INT" identifier "=" expression nl
-			"FLOAT" identifier "=" expression nl
-			"TEXT" identifier "=" expression nl
-			indentifier "=" expression nl
-
-			"FUNC" identifier ["USING" identifier {"," identifier}]"IS" nl 
-				{statement} 
-			"ENDFUNC" nl
-
-			"DO" identifier ["WITH" expression {"," expression}]
-
-{expression} ::= term {("-" | "+") term}
-term ::= unary {("*" | "/" | "%") unary}
-unary ::= ["-" | "+"] primary
-primary ::= number | identifier
-condition ::= expression ((">" | ">=" | "<" | "<=" | "==") expression)+
-nl ::= '\n'+
-*/
