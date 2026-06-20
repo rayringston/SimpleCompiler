@@ -968,6 +968,23 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
 		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
 
+	} else if (checkToken(TOKEN_TYPE::INPUT)) { // built-in INPUT functions
+		nextToken();							// INPUT ()
+
+		type = TOKEN_TYPE::TEXT;
+		match(TOKEN_TYPE::LPARENTH);
+
+		emitter.emitLine("stp x0, x1, [sp, #-16]!", caller);
+		emitter.emitLine("stp x2, x3, [sp, #-16]!", caller);
+
+		cout << "RUNTIME-CALL [usr_input]\n";
+		emitter.emitLine("bl usr_input", caller);
+		emitter.emitLine("mov x9, x0", caller);
+
+		match(TOKEN_TYPE::RPARENTH);
+
+		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
+		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
 	} else if (checkToken(TOKEN_TYPE::STRING)) { // string literal in an expression
 		if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
 			stringLiterals.push_back(curToken.text);

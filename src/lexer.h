@@ -21,7 +21,6 @@ enum TOKEN_TYPE : int {
 	INT = 101,
 	FLOAT,
 	TEXT,
-	INPUT,
 
 	IF,
 	THEN,
@@ -49,6 +48,7 @@ enum TOKEN_TYPE : int {
 	LEN = 201,
 	SUBSTR,
 	CHARAT,
+	INPUT,
 		// ...
 	// Operators
 	EQ = 301,
@@ -82,7 +82,6 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case INT: return "INT";
 		case FLOAT: return "FLOAT";
 		case TEXT: return "TEXT";
-		case INPUT: return "INPUT";
 
 		case IF: return "IF";
 		case THEN: return "THEN";
@@ -111,7 +110,8 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case LEN: return "LEN";
 		case SUBSTR: return "SUBSTR";
 		case CHARAT: return "CHARAT";
-		
+		case INPUT: return "INPUT";
+
 		// OPERATORS
 		case EQ: return "EQ";
 		case PLUS: return "PLUS";
@@ -153,7 +153,6 @@ class Token {
 			if (tokenText == "INT") return INT;
 			else if (tokenText == "FLOAT") return FLOAT;
 			else if (tokenText == "TEXT") return TEXT;
-			else if (tokenText == "INPUT") return INPUT;
 
 			else if (tokenText == "IF") return IF;
 			else if (tokenText == "THEN") return THEN;
@@ -181,6 +180,7 @@ class Token {
 			else if (tokenText == "LEN") return LEN;
 			else if (tokenText == "SUBSTR") return SUBSTR;
 			else if (tokenText == "CHARAT") return CHARAT;
+			else if (tokenText == "INPUT") return INPUT;
 			else return INVALID;
 		}
 };

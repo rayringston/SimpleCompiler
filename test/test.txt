@@ -1,20 +1,11 @@
-TEXT x = "NIGGER\n"
-INT i = 0
+TEXT x = INPUT()
 
-WHILE i < LEN(x)-1 DO
+TEXT y = INPUT()
 
-PRINT(SUBSTR(x,0,i))
+
+PRINT(x)
 PUTCHAR('\n')
-i = i + 1
-
-ENDWHILE
 
 
-WHILE i >= 0 DO
-
-PRINT(SUBSTR(x,0,i))
+PRINT(y)
 PUTCHAR('\n')
-i = i - 1
-
-ENDWHILE
-
