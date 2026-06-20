@@ -1,23 +1,10 @@
-TEXT a = "a\n"
-TEXT b = "b\n"
-TEXT aCopy = "a\n"
+TEXT x = "Hello world.\n"
 
-IF a == b THEN
-PRINT("FALSE")
-ELSE
-PRINT("TRUE")
-ENDIF
+INT i = 0
 
-IF a != b THEN
-PRINT("TRUE")
-ELSE
-PRINT("FALSE")
-ENDIF
+WHILE i < LEN(x) DO
 
-IF a == aCopy THEN
-PRINT("TRUE")
-ENDIF
+PRINT(CHARAT(x, i))
+i = i + 1
 
-IF a == "a\n" THEN
-PRINT("TRUE")
-ENDIF
+ENDWHILE

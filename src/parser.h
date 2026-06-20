@@ -601,6 +601,19 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 			emitter.emitLine("adr x13, " + identLabel, caller);
 			emitter.emitLine("str x11, [x13]", caller);
 		}
+	/*} else if (checkToken(TOKEN_TYPE::INPUT)) { // INPUT identifier
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-INPUT\n" : "STATEMENT-INPUT\n");
+		nextToken();
+
+		if (!symbolMap.exists(curToken.text)) {
+			abort("Symbol (" + curToken.text + ") does not exist.");
+		}
+
+		if (symbolMap.getType(curToken.text) != TOKEN_TYPE::TEXT) {
+			abort("Cannot assign value of type (" + tokenTypeToString(expression(caller, parameters)) + ") to variable of type (TEXT).");
+		}
+
+	*/
 	} else if (checkToken(TOKEN_TYPE::IDENTIFIER)) { // identifier = expression
 		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-ASSIGN\n" : "STATEMENT-ASSIGN\n");
 
@@ -807,8 +820,7 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 
 			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
 
-			emitter.emitLine("adr x9, S" + to_string(index), caller);
-			emitter.emitLine("ldr x9, [x9]", caller);
+			emitter.emitLine("adr x0, S" + to_string(index), caller);
 			emitter.emitLine("bl str_len", caller);
 			emitter.emitLine("mov x9, x0", caller);
 
@@ -824,7 +836,42 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		}
 
 		match(TOKEN_TYPE::RPARENTH);
-	} else if (TOKEN_TYPE::STRING) { // string literal in an expression
+	} else if (checkToken(TOKEN_TYPE::CHARAT)) { 	// built-in CHARAT function
+		nextToken();								// CHARAT(TEXT, INT) -- returns INT
+
+		type = TOKEN_TYPE::INT;
+		match(TOKEN_TYPE::LPARENTH);
+		
+		 if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
+			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
+				stringLiterals.push_back(curToken.text);
+			}
+
+			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+			emitter.emitLine("adr x0, S" + to_string(index), caller);
+
+			nextToken();
+		} else { // input is an expression, of TEXT type
+			if (expression(caller, parameters) != TOKEN_TYPE::TEXT) {
+				abort("CHARAT function expects type (TEXT) for first parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+			}
+
+			emitter.emitLine("mov x0, x11", caller);
+		}
+		
+		match(TOKEN_TYPE::COMMA);
+
+		if (expression(caller, parameters) != TOKEN_TYPE::INT) {
+			abort("CHARAT function expects type (INT) for second parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+		}
+
+		emitter.emitLine("mov x1, x11", caller);
+		emitter.emitLine("bl str_char_at", caller);
+		emitter.emitLine("mov x9, x0", caller);
+		match(TOKEN_TYPE::RPARENTH);
+
+	} else if (checkToken(TOKEN_TYPE::STRING)) { // string literal in an expression
 		if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
 			stringLiterals.push_back(curToken.text);
 		}
@@ -835,7 +882,12 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 
 		type = TOKEN_TYPE::TEXT;
 		nextToken();
-} else {
+	} else if (checkToken(TOKEN_TYPE::CHARACTER)) { // character literal in an expression
+		type = TOKEN_TYPE::INT;
+
+		emitter.emitLine("mov x9, #" + to_string((int)curToken.text[0]), caller);
+		nextToken();
+	} else {
 		abort("Unexpected token (" + curToken.text + ") of type (" + tokenTypeToString(curToken.type) + ") in primary.");
 	}
 

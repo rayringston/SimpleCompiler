@@ -15,31 +15,38 @@ enum TOKEN_TYPE : int {
 	NEWLINE = 0,
 	NUMBER,
 	STRING,
+	CHARACTER,
 	IDENTIFIER,
 	// Keywords
 	INT = 101,
 	FLOAT,
 	TEXT,
+	INPUT,
+
 	IF,
 	THEN,
 	ELSEIF,
 	ELSE,
 	ENDIF,
+
 	WHILE,
 	DO,
 	ENDWHILE,
+
 	FUNC,
 	IS,
 	USING,
 	WITH,
 	ENDFUNC,
 	RET, 
+
 	PRINT,
 	LABEL,
 	GOTO,
 	// Built-in Functions
 	LEN = 201,
 	SUBSTR,
+	CHARAT,
 		// ...
 	// Operators
 	EQ = 301,
@@ -67,11 +74,13 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case NEWLINE: return "NEWLINE";
 		case NUMBER: return "NUMBER";
 		case STRING: return "STRING";
+		case CHARACTER: return "CHARACTER";
 		case IDENTIFIER: return "IDENTIFIER";
 		// KEYWORDS
 		case INT: return "INT";
 		case FLOAT: return "FLOAT";
 		case TEXT: return "TEXT";
+		case INPUT: return "INPUT";
 
 		case IF: return "IF";
 		case THEN: return "THEN";
@@ -93,10 +102,12 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case PRINT: return "PRINT";
 		case LABEL: return "LABEL";
 		case GOTO: return "GOTO";
+
 		// BUILT-IN FUNCTIONS
 		case LEN: return "LEN";
 		case SUBSTR: return "SUBSTR";
-
+		case CHARAT: return "CHARAT";
+		
 		// OPERATORS
 		case EQ: return "EQ";
 		case PLUS: return "PLUS";
@@ -138,25 +149,32 @@ class Token {
 			if (tokenText == "INT") return INT;
 			else if (tokenText == "FLOAT") return FLOAT;
 			else if (tokenText == "TEXT") return TEXT;
+			else if (tokenText == "INPUT") return INPUT;
+
 			else if (tokenText == "IF") return IF;
 			else if (tokenText == "THEN") return THEN;
 			else if (tokenText == "ELSEIF") return ELSEIF;
 			else if (tokenText == "ELSE") return ELSE;
 			else if (tokenText == "ENDIF") return ENDIF;
+
 			else if (tokenText == "WHILE") return WHILE;
 			else if (tokenText == "DO") return DO;
 			else if (tokenText == "ENDWHILE") return ENDWHILE;
+
 			else if (tokenText == "LABEL") return LABEL;
 			else if (tokenText == "GOTO") return GOTO;
 			else if (tokenText == "PRINT") return PRINT;
+
 			else if (tokenText == "FUNC") return FUNC;
 			else if (tokenText == "IS") return IS;
 			else if (tokenText == "WITH") return WITH;
 			else if (tokenText == "USING") return USING;
 			else if (tokenText == "ENDFUNC") return ENDFUNC;
 			else if (tokenText == "RET") return RET;
+
 			else if (tokenText == "LEN") return LEN;
 			else if (tokenText == "SUBSTR") return SUBSTR;
+			else if (tokenText == "CHARAT") return CHARAT;
 			else return INVALID;
 		}
 };
@@ -296,14 +314,32 @@ Token Lexer::getToken() {
 		int startPos = curPos;
 
 		while (curChar != '\"') {
-			if (curChar == '\r' || curChar == '\t' || curChar == '\n') {
-				abort("Forbidden character in string");
+			if (curChar == '\r' || curChar == '\t') {
+				abort("Forbidden character in string literal");
 			}
 			nextChar();
 		}
 
 		curToken.text = source.substr(startPos, curPos - startPos);
 		curToken.type = TOKEN_TYPE::STRING;
+	} else if (curChar == '\'') { // detects character literals. same as string but with single quotes and only one character
+		nextChar();
+		int startPos = curPos;
+
+		while (curChar != '\'') {
+			if (curChar == '\r' || curChar == '\t') {
+				abort("Forbidden character in character literal");
+			}
+			nextChar();
+		}
+
+		if (curPos - startPos != 1) {
+			abort("Character literal must be exactly one character, got " + to_string(curPos - startPos));
+		}
+
+		curToken.text = source.substr(startPos, curPos - startPos);
+		curToken.type = TOKEN_TYPE::CHARACTER;
+	
 	} else if (isdigit(curChar)) { // check for number, same way as string. need to also check for decimal point
 		int startPos = curPos;
 		while (isdigit(peek())) {
