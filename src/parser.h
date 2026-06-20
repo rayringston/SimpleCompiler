@@ -366,6 +366,22 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 		}
 
 		match(TOKEN_TYPE::RPARENTH);
+	} else if (checkToken(TOKEN_TYPE::PUTCHAR)) { // PUTCHAR ( expression )
+		cout << (caller == TOKEN_TYPE::FUNC ? "FUNC-STATEMENT-PRINT_CHAR\n" : "STATEMENT-PRINT_CHAR\n");
+
+		nextToken();
+		match(TOKEN_TYPE::LPARENTH);
+
+		TOKEN_TYPE type = expression(caller, parameters);
+		emitter.emitLine("mov x0, x11", caller);
+
+		if (type != TOKEN_TYPE::INT) {
+			abort("PUTCHAR function expects type (INT), got (" + tokenTypeToString(type) + ").");
+		}
+
+		emitter.emitLine("bl print_char", caller);
+
+		match(TOKEN_TYPE::RPARENTH);
 	} else if (checkToken(TOKEN_TYPE::IF)) { // IF condition THEN statement ENDIF
 		int elseIfCount = 0;
 
@@ -445,6 +461,7 @@ void Parser::statement(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> param
 
 		if (checkToken(TOKEN_TYPE::LPARENTH)) {
 			nextToken();
+			
 
 			if (checkToken(TOKEN_TYPE::INT) || checkToken(TOKEN_TYPE::FLOAT) || checkToken(TOKEN_TYPE::TEXT)) {
 				returnType = curToken.type;

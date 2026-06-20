@@ -41,6 +41,8 @@ enum TOKEN_TYPE : int {
 	RET, 
 
 	PRINT,
+	PUTCHAR,
+
 	LABEL,
 	GOTO,
 	// Built-in Functions
@@ -100,6 +102,8 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case RET: return "RET";
 
 		case PRINT: return "PRINT";
+		case PUTCHAR: return "PUTCHAR";
+
 		case LABEL: return "LABEL";
 		case GOTO: return "GOTO";
 
@@ -163,7 +167,9 @@ class Token {
 
 			else if (tokenText == "LABEL") return LABEL;
 			else if (tokenText == "GOTO") return GOTO;
+
 			else if (tokenText == "PRINT") return PRINT;
+			else if (tokenText == "PUTCHAR") return PUTCHAR;
 
 			else if (tokenText == "FUNC") return FUNC;
 			else if (tokenText == "IS") return IS;
@@ -327,19 +333,31 @@ Token Lexer::getToken() {
 		int startPos = curPos;
 
 		while (curChar != '\'') {
-			if (curChar == '\r' || curChar == '\t') {
-				abort("Forbidden character in character literal");
-			}
 			nextChar();
-		}
-
-		if (curPos - startPos != 1) {
-			abort("Character literal must be exactly one character, got " + to_string(curPos - startPos));
 		}
 
 		curToken.text = source.substr(startPos, curPos - startPos);
 		curToken.type = TOKEN_TYPE::CHARACTER;
-	
+
+		if (curToken.text.length() == 0) {
+			abort("Character literal cannot be empty");
+		} else if (curToken.text.length() > 1) {
+			if (curToken.text.length() == 2 && curToken.text[0] == '\\') { // allow for escaped characters like '\n', '\t', etc.
+				char escapedChar;
+				switch (curToken.text[1]) {
+					case 'n': escapedChar = '\n'; break;
+					case 't': escapedChar = '\t'; break;
+					case 'r': escapedChar = '\r'; break;
+					case '\\': escapedChar = '\\'; break;
+					case '\'': escapedChar = '\''; break;
+					case '\"': escapedChar = '\"'; break;
+					default: abort("Unknown escape sequence \\" + string(1, curToken.text[1]));
+				}
+				curToken.text = string(1, escapedChar);
+			} else {
+				abort("Character literal must be exactly one character long, got " + curToken.text);
+			}
+		}
 	} else if (isdigit(curChar)) { // check for number, same way as string. need to also check for decimal point
 		int startPos = curPos;
 		while (isdigit(peek())) {

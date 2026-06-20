@@ -6,6 +6,7 @@ This language is staticly compiler and strongly typed. The only implemented type
 ## Statements
 <pre>
 "PRINT" (expression | string) nl
+"PUTCHAR" (expression | character) nl
 
 ---	
 	
@@ -35,7 +36,7 @@ identifier "=" expression nl
 
 ---
 
-"FUNC" [(INT | FLOAT | TEXT |   ] identifier ["USING" (INT | FLOAT | TEXT) identifier {"," identifier}]"IS" nl 
+"FUNC" [INT | FLOAT | TEXT |   ] identifier ["USING" (INT | FLOAT | TEXT) identifier {"," identifier}]"IS" nl 
 	{statement} 
 "ENDFUNC" nl
 
@@ -55,4 +56,10 @@ condition ::= expression ((">" | ">=" | "<" | "<=" | "==") expression)+
 nl ::= '\n'+
 
 </pre>
+
+### Built-in Functions
+
+"LEN"(expression) : (TEXT) -> INT
+
+"CHARAT"(expression, expression) : (TEXT, INT) -> INT
 

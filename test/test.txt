@@ -1,10 +1,9 @@
-TEXT x = "Hello world.\n"
+TEXT str = "hello world.\n"
+INT idx = LEN(str) - 1
 
-INT i = 0
-
-WHILE i < LEN(x) DO
-
-PRINT(CHARAT(x, i))
-i = i + 1
-
+WHILE idx >= 0 DO
+PUTCHAR(CHARAT(str, idx))
+idx = idx - 1
 ENDWHILE
+
+PUTCHAR('\n')
