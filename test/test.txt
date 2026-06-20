@@ -1,10 +1,23 @@
-INT bottom = 0
-INT top = 10
+TEXT a = "a\n"
+TEXT b = "b\n"
+TEXT aCopy = "a\n"
 
-WHILE top >= bottom DO
-PRINT(bottom)
+IF a == b THEN
+PRINT("FALSE")
+ELSE
+PRINT("TRUE")
+ENDIF
 
-bottom = bottom + 1
+IF a != b THEN
+PRINT("TRUE")
+ELSE
+PRINT("FALSE")
+ENDIF
 
-ENDWHILE
+IF a == aCopy THEN
+PRINT("TRUE")
+ENDIF
 
+IF a == "a\n" THEN
+PRINT("TRUE")
+ENDIF

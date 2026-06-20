@@ -824,7 +824,18 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		}
 
 		match(TOKEN_TYPE::RPARENTH);
-	} else {
+	} else if (TOKEN_TYPE::STRING) { // string literal in an expression
+		if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
+			stringLiterals.push_back(curToken.text);
+		}
+
+		int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+		emitter.emitLine("adr x9, S" + to_string(index), caller);
+
+		type = TOKEN_TYPE::TEXT;
+		nextToken();
+} else {
 		abort("Unexpected token (" + curToken.text + ") of type (" + tokenTypeToString(curToken.type) + ") in primary.");
 	}
 
@@ -835,7 +846,7 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> parameters) {
 	cout << "CONDITION\n";
 
-	expression(caller, parameters);
+	TOKEN_TYPE expressionType = expression(caller, parameters);
 	// result in r11
 	emitter.emitLine("mov x12, x11", caller);
 
@@ -843,21 +854,40 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 
 	if (checkToken(TOKEN_TYPE::EQEQ) || checkToken(TOKEN_TYPE::NEQ) || checkToken(TOKEN_TYPE::GT) || checkToken(TOKEN_TYPE::GTEQ) || checkToken(TOKEN_TYPE::LT) || checkToken(TOKEN_TYPE::LTEQ)) {
 		nextToken();
-		expression(caller, parameters);
+		if (expression(caller, parameters) != expressionType) {
+			abort("Incompatible types in condition (" + tokenTypeToString(expressionType) + ").");
+		}
 	} else {
 		abort("Expected expression, got " + curToken.text);
 	}
 	
-	emitter.emitLine("cmp x12, x11", caller);
 
 	string branchType = "";
 
 	switch (conditional) {
 		case TOKEN_TYPE::EQEQ:
-			branchType = "bne ";
+			if (expressionType == TOKEN_TYPE::TEXT) {
+				emitter.emitLine("mov x0, x12", caller); // set up x0, x1 for str_cmp runtime
+				emitter.emitLine("mov x1, x11", caller);
+				emitter.emitLine("bl str_cmp", caller);
+
+				branchType = "cbnz x0, ";
+			} else {
+				 branchType = "bne ";
+			}
+
 			break;
 		case TOKEN_TYPE::NEQ:
-			branchType = "beq "; 
+			if (expressionType == TOKEN_TYPE::TEXT) {
+				emitter.emitLine("mov x0, x12", caller); // set up x0, x1 for str_cmp runtime
+				emitter.emitLine("mov x1, x11", caller);
+				emitter.emitLine("bl str_cmp", caller);
+
+				branchType = "cbz x0, ";
+			} else {
+				branchType = "beq ";
+			}
+
 			break;
 		case TOKEN_TYPE::GT:
 			branchType = "ble "; 	
@@ -873,6 +903,7 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 			break;
 	}
 
+	if (expressionType != TOKEN_TYPE::TEXT) emitter.emitLine("cmp x12, x11", caller);
 	emitter.emitLine(branchType + exitLabel, caller);
 
 	/* -------------- Currently removed multiple expressions w/i a condition
