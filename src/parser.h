@@ -838,6 +838,9 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		type = TOKEN_TYPE::INT;
 		match(TOKEN_TYPE::LPARENTH);
 
+		emitter.emitLine("stp x0, x1, [sp, #-16]!", caller);
+		emitter.emitLine("stp x2, x3, [sp, #-16]!", caller);
+
 		if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
 			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
 				stringLiterals.push_back(curToken.text);
@@ -865,13 +868,21 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		}
 
 		match(TOKEN_TYPE::RPARENTH);
+
+		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
+		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
+
+
 	} else if (checkToken(TOKEN_TYPE::CHARAT)) { 	// built-in CHARAT function
 		nextToken();								// CHARAT(TEXT, INT) -- returns INT
 
 		type = TOKEN_TYPE::INT;
 		match(TOKEN_TYPE::LPARENTH);
 		
-		 if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
+		emitter.emitLine("stp x0, x1, [sp, #-16]!", caller);
+		emitter.emitLine("stp x2, x3, [sp, #-16]!", caller);
+
+		if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
 			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
 				stringLiterals.push_back(curToken.text);
 			}
@@ -901,6 +912,61 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		emitter.emitLine("bl str_char_at", caller);
 		emitter.emitLine("mov x9, x0", caller);
 		match(TOKEN_TYPE::RPARENTH);
+
+		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
+		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
+
+	} else if (checkToken(TOKEN_TYPE::SUBSTR)) {	// build-in SUBSTR function
+		nextToken();								// SUBTR(TEXT, INT, INT)
+
+		type = TOKEN_TYPE::TEXT;
+		match(TOKEN_TYPE::LPARENTH);
+
+		emitter.emitLine("stp x0, x1, [sp, #-16]!", caller);
+		emitter.emitLine("stp x2, x3, [sp, #-16]!", caller);
+
+		if (checkToken(TOKEN_TYPE::STRING)) { // input is a string literal
+			if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
+				stringLiterals.push_back(curToken.text);
+			}
+
+			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+
+			emitter.emitLine("adr x0, S" + to_string(index), caller);
+
+			nextToken();
+		} else { // input is an expression, of TEXT type
+			if (expression(caller, parameters) != TOKEN_TYPE::TEXT) {
+				abort("CHARAT function expects type (TEXT) for first parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+			}
+
+			emitter.emitLine("mov x0, x11", caller);
+		}
+		
+		match(TOKEN_TYPE::COMMA);
+
+		if (expression(caller, parameters) != TOKEN_TYPE::INT) {
+			abort("CHARAT function expects type (INT) for second parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+		}
+
+		emitter.emitLine("mov x1, x11", caller);
+
+		match(TOKEN_TYPE::COMMA);
+
+		if (expression(caller, parameters) != TOKEN_TYPE::INT) {
+			abort("CHARAT function expects type (INT) for second parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+		}
+
+		emitter.emitLine("mov x2, x11", caller);
+
+		cout << "RUNTIME-CALL [sub_str]\n";
+
+		emitter.emitLine("bl sub_str", caller);
+		emitter.emitLine("mov x9, x0", caller);
+		match(TOKEN_TYPE::RPARENTH);
+
+		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
+		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
 
 	} else if (checkToken(TOKEN_TYPE::STRING)) { // string literal in an expression
 		if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
