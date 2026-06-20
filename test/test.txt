@@ -1,9 +1,12 @@
-TEXT str = "hello world.\n"
-INT idx = LEN(str) - 1
+TEXT a = "hello world.\n"
+TEXT b = "1 2 3 4 5\n"
 
-WHILE idx >= 0 DO
-PUTCHAR(CHARAT(str, idx))
-idx = idx - 1
+TEXT c = a + b
+
+INT idx = 0
+INT length = LEN(c)
+
+WHILE idx < length DO
+PUTCHAR(CHARAT(c, idx))
+idx = idx + 1
 ENDWHILE
-
-PUTCHAR('\n')

@@ -51,7 +51,7 @@ program ::= 		{statement}
 expression ::= term {("-" | "+") term}
 term ::= unary {("*" | "/" | "%") unary}
 unary ::= ["-" | "+"] primary
-primary ::= number | identifier
+primary ::= number | identifier | string | character
 condition ::= expression ((">" | ">=" | "<" | "<=" | "==") expression)+
 nl ::= '\n'+
 

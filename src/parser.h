@@ -692,11 +692,7 @@ TOKEN_TYPE Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>
 
 	emitter.emitLine("mov x11, x10", caller);
 
-	while (checkToken(TOKEN_TYPE::PLUS) || checkToken(TOKEN_TYPE::MINUS)) {
-		if (lTermType != TOKEN_TYPE::INT && lTermType != TOKEN_TYPE::FLOAT) {
-			abort("Cannot apply operator (" + tokenTypeToString(curToken.type) + ") to non-numeric type (" + tokenTypeToString(lTermType) + ").");
-		}
-	
+	while (checkToken(TOKEN_TYPE::PLUS) || checkToken(TOKEN_TYPE::MINUS)) {	
 		TOKEN_TYPE lastType = curToken.type;
 
 		nextToken();
@@ -707,8 +703,20 @@ TOKEN_TYPE Parser::expression(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>
 		}
 
 		if (lastType == TOKEN_TYPE::PLUS) { // +
-			emitter.emitLine("add x11, x11, x10", caller);
+			if (lTermType == TOKEN_TYPE::TEXT) { // addition for TEXT type terms. uses the str_concat runtime
+				cout << "RUNTIME-CALL [str_concat]\n";
+				emitter.emitLine("mov x0, x11");
+				emitter.emitLine("mov x1, x10");
+				emitter.emitLine("bl str_concat");
+				emitter.emitLine("mov x11, x0");
+			} else if (lTermType == TOKEN_TYPE::INT || lTermType == TOKEN_TYPE::FLOAT) { // additition for INT or FLOAT type terms
+				emitter.emitLine("add x11, x11, x10", caller);
+			}
 		} else if (lastType == TOKEN_TYPE::MINUS) { // -
+			if (lTermType == TOKEN_TYPE::TEXT) {
+				abort("Cannot apply operator (" + tokenTypeToString(curToken.type) + ") to non-numeric type (" + tokenTypeToString(lTermType) + ").");
+			}
+
 			emitter.emitLine("sub x11, x11, x10", caller);
 		}
 	}
@@ -836,6 +844,8 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 			}
 
 			int index = find(stringLiterals.begin(), stringLiterals.end(), curToken.text) - stringLiterals.begin();
+			
+			cout << "RUNTIME-CALL [str_len]\n";
 
 			emitter.emitLine("adr x0, S" + to_string(index), caller);
 			emitter.emitLine("bl str_len", caller);
@@ -846,6 +856,8 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 			if (expression(caller, parameters) != TOKEN_TYPE::TEXT) {
 				abort("LEN function expects type (TEXT), got (" + tokenTypeToString(expression(caller, parameters)) + ").");
 			}
+
+			cout << "RUNTIME-CALL [str_len]\n";
 
 			emitter.emitLine("mov x0, x11", caller);
 			emitter.emitLine("bl str_len", caller);
@@ -882,6 +894,8 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		if (expression(caller, parameters) != TOKEN_TYPE::INT) {
 			abort("CHARAT function expects type (INT) for second parameter, got (" + tokenTypeToString(expression(caller, parameters)) + ").");
 		}
+
+		cout << "RUNTIME-CALL [str_char_at]\n";
 
 		emitter.emitLine("mov x1, x11", caller);
 		emitter.emitLine("bl str_char_at", caller);
@@ -936,6 +950,8 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 	switch (conditional) {
 		case TOKEN_TYPE::EQEQ:
 			if (expressionType == TOKEN_TYPE::TEXT) {
+				cout << "RUNTIME-CALL [str_cmp]\n";
+
 				emitter.emitLine("mov x0, x12", caller); // set up x0, x1 for str_cmp runtime
 				emitter.emitLine("mov x1, x11", caller);
 				emitter.emitLine("bl str_cmp", caller);
@@ -948,6 +964,8 @@ void Parser::condition(string exitLabel, TOKEN_TYPE caller, vector<pair<string, 
 			break;
 		case TOKEN_TYPE::NEQ:
 			if (expressionType == TOKEN_TYPE::TEXT) {
+				cout << "RUNTIME-CALL [str_cmp]\n";
+
 				emitter.emitLine("mov x0, x12", caller); // set up x0, x1 for str_cmp runtime
 				emitter.emitLine("mov x1, x11", caller);
 				emitter.emitLine("bl str_cmp", caller);
