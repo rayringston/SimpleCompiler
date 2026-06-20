@@ -1,0 +1,17 @@
+INT count = 10
+
+INT a = 0
+INT b = 1
+INT temp = 0
+
+WHILE count > 0 DO
+
+PRINT(a)
+
+temp = b
+b = a + b
+a = temp
+
+count = count - 1
+
+ENDWHILE

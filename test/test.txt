@@ -1,11 +1,10 @@
-TEXT str = "hello world\n"
+INT bottom = 0
+INT top = 10
 
-INT l = LEN(str)
+WHILE top >= bottom DO
+PRINT(bottom)
 
-WHILE l > 0 DO
-
-PRINT(l)
-l = l - 1
+bottom = bottom + 1
 
 ENDWHILE
 

@@ -6,7 +6,7 @@ mov x2, x0		// x2-3 will hold intermediate valuesi
 			// at the very start, determine if the number is negative
 cmp x2, #0
 cset x12, GE
-csinv x2, x2, x2, GE
+csneg x2, x2, x2, GE
 
 mov x4, #10		// x4 holds divisor, 10
 
