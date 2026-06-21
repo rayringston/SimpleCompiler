@@ -1,11 +1,4 @@
-TEXT x = INPUT()
+INT x = 10
+TEXT str = INTTOTEXT(x)
 
-TEXT y = INPUT()
-
-
-PRINT(x)
-PUTCHAR('\n')
-
-
-PRINT(y)
-PUTCHAR('\n')
+PRINT(str + "abc\n")

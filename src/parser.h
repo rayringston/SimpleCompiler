@@ -968,8 +968,8 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
 		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
 
-	} else if (checkToken(TOKEN_TYPE::INPUT)) { // built-in INPUT functions
-		nextToken();							// INPUT ()
+	} else if (checkToken(TOKEN_TYPE::INPUT)) { // built-in INPUT function
+		nextToken();							// INPUT () -> TEXT
 
 		type = TOKEN_TYPE::TEXT;
 		match(TOKEN_TYPE::LPARENTH);
@@ -985,6 +985,28 @@ TOKEN_TYPE Parser::primary(TOKEN_TYPE caller, vector<pair<string, TOKEN_TYPE>> p
 
 		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
 		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
+	} else if (checkToken(TOKEN_TYPE::INTTOTEXT)) { // built-in INTTOTEXT function
+		nextToken();								// INTTOTEXT (INT) -> TEXT
+
+		type = TOKEN_TYPE::TEXT;
+		match(TOKEN_TYPE::LPARENTH);
+
+		emitter.emitLine("stp x0, x1, [sp, #-16]!", caller);
+		emitter.emitLine("stp x2, x3, [sp, #-16]!", caller);
+
+		if (expression(caller, parameters) != TOKEN_TYPE::INT) {
+			abort("INTTOTEXT function expects type (INT) as a parameter. Got (" + tokenTypeToString(expression(caller, parameters)) + ").");
+		}
+
+		emitter.emitLine("mov x0, x11");
+		emitter.emitLine("bl int_to_text");
+		emitter.emitLine("mov x9, x0");
+
+		emitter.emitLine("ldp x2, x3, [sp], #16", caller);
+		emitter.emitLine("ldp x0, x1, [sp], #16", caller);
+
+		match(TOKEN_TYPE::RPARENTH);
+
 	} else if (checkToken(TOKEN_TYPE::STRING)) { // string literal in an expression
 		if (find(stringLiterals.begin(), stringLiterals.end(), curToken.text) == stringLiterals.end()) {
 			stringLiterals.push_back(curToken.text);

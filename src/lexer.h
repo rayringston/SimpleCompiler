@@ -49,6 +49,7 @@ enum TOKEN_TYPE : int {
 	SUBSTR,
 	CHARAT,
 	INPUT,
+	INTTOTEXT,
 		// ...
 	// Operators
 	EQ = 301,
@@ -111,6 +112,7 @@ string tokenTypeToString(TOKEN_TYPE type) {
 		case SUBSTR: return "SUBSTR";
 		case CHARAT: return "CHARAT";
 		case INPUT: return "INPUT";
+		case INTTOTEXT: return "INTTOTEXT";
 
 		// OPERATORS
 		case EQ: return "EQ";
@@ -181,6 +183,7 @@ class Token {
 			else if (tokenText == "SUBSTR") return SUBSTR;
 			else if (tokenText == "CHARAT") return CHARAT;
 			else if (tokenText == "INPUT") return INPUT;
+			else if (tokenText == "INTTOTEXT") return INTTOTEXT;
 			else return INVALID;
 		}
 };
