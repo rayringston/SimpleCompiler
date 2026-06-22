@@ -1,4 +1,8 @@
-INT x = 10
-TEXT str = INTTOTEXT(x)
+TEXT x = "Hello "
+TEXT y = "world.\n"
+INT num = 10
+TEXT str = INTTOTEXT(num * num)
 
-PRINT(str + "abc\n")
+
+
+PRINT(x + y + str)

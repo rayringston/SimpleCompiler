@@ -23,30 +23,23 @@ cmp x20, #0             // make sure start >= 0
 b.lt sub_str_oob
 
 bl str_len              // x0 will hold length of input string
-sub x0, x0, #1
 cmp x21, x0
-b.gt sub_str_oob        // if end index > len - 1, oob exit
+b.gt sub_str_oob        // if end index > len, oob exit
 
 sub x22, x21, x20
-add x0, x22, #2        // move the size of space to x0,
+add x0, x22, #1         // move the size of space to x0,
 
 bl alloc
+mov x22, x0             // x22 : addr of the output string
 
-mov x22, x0            // x22 : addr of the output string
+mov x0, x22         
+add x1, x19, x20        // source addr = src + start offset
+sub x2, x21, x20
+bl mem_cpy
 
-mov x24, #0
-
-sub_str_loop:           // x20 is the offest in the original
-ldrb w23, [x19, x20]    // x24 is the offset in the new address
-strb w23, [x22, x24]
-
-add x20, x20, #1
-add x24, x24, #1
-
-cmp x20, x21
-b.le sub_str_loop
-
-strb wzr, [x22, x24]
+sub x23, x21, x20
+add x23, x23, #1        // get offest for the next byte, to copy over \0
+strb wzr, [x22, x23]
 mov x0, x22
 
 ldp x23, x24, [sp], #16

@@ -50,25 +50,13 @@ int_to_text_positive:
 
 mov x0, x24
 add x0, x0, #1
-bl alloc
-mov x23, x0         // x23 : addr of string
+bl alloc            // returns pointer in x0
 
-mov x20, #0         // index = 0
+mov x1, x22
+mov x2, x24
+bl mem_cpy          // doesn't change x0
 
-mov x21, x22        // FIX: preserve true start pointer of string
-
-int_to_text_copy:
-ldrb w1, [x21, x20]
-strb w1, [x23, x20]
-
-add x20, x20, #1
-cmp x20, x24
-b.lt int_to_text_copy
-
-mov w1, #0
-strb w1, [x23, x20]
-
-mov x0, x23
+strb wzr, [x0, x24]
 
 add sp, sp, #32
 
@@ -78,3 +66,4 @@ ldp x19, x20, [sp], #16
 
 ldp fp, lr, [sp], #16
 ret
+

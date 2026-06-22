@@ -22,9 +22,9 @@ mov x20, #0                     // x20 : idx / length
 
 usr_input_get_len:
 ldrb w21, [x19, x20]
-cmp w21, #0
+cmp w21, #0 // \0
 b.eq usr_input_len_done
-cmp w21, #10
+cmp w21, #10 // \n
 b.eq usr_input_len_done
 add x20, x20, #1
 b usr_input_get_len
@@ -39,19 +39,10 @@ add x0, x0, #1
 bl alloc
 mov x23, x0                     // x23 : allocated string address
 
-mov x22, #0     
-                // x22 : copying idx
-usr_input_alloc:
-cmp x22, x20
-b.ge usr_input_alloc_done
-
-ldrb w21, [x19, x22]
-strb w21, [x23, x22]
-
-add x22, x22, #1
-b usr_input_alloc
-
-usr_input_alloc_done:
+mov x0, x23
+mov x1, x19
+mov x2, x20
+bl mem_cpy
 
 strb wzr, [x23, x20]
 

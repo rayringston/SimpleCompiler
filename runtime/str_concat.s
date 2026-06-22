@@ -9,58 +9,37 @@ stp x19, x20, [sp, #-16]!
 stp x21, x22, [sp, #-16]!
 str x23, [sp, #-16]!
 
-mov x19, x0                // str1
-mov x20, x1                // str2
+mov x19, x0                 // x19 : str1
+mov x20, x1                 // x20 : str2
 
 // len1
 mov x0, x19
 bl str_len
-mov x21, x0
+mov x21, x0                 // x21 : len 1
 
 // len2
 mov x0, x20
 bl str_len
-mov x22, x0
+mov x22, x0                 // x22 : len 2
 
 // alloc(len1 + len2 + 1)
 add x0, x21, x22
 add x0, x0, #1
-bl alloc
+mov x24, x0                 // hold this final length to add the null-pointer at the end
 
-mov x23, x0                // save destination pointer
+bl alloc                    // x0 holds destination pointer
+mov x23, x0                 // x3 : dest pointer
 
-// copy first string
-mov x1, #0                 // total offset
-mov x6, x21                // remaining chars
+mov x1, x19
+mov x2, x21
+bl mem_cpy                  // copy str1 to dest
 
-str_concat_first:
-cbz x6, str_concat_setup_second
+add x0, x0, x21             // offset the dest string by the length of str1
+mov x1, x20
+add x2, x22, #1                 // copy str2 to dest + offset
+bl mem_cpy                  // x0 will hold the offsetted addr
 
-ldrb w7, [x19, x1]
-strb w7, [x23, x1]
-
-sub x6, x6, #1
-add x1, x1, #1
-b str_concat_first
-
-// copy second string
-str_concat_setup_second:
-mov x6, x22
-
-str_concat_second:
-cbz x6, str_concat_done
-
-sub x2, x1, x21
-ldrb w7, [x20, x2]
-strb w7, [x23, x1]
-
-sub x6, x6, #1
-add x1, x1, #1
-b str_concat_second
-
-// write null terminator
-str_concat_done:
-strb wzr, [x23, x1]
+//strb wzr, [x23, x24]
 
 mov x0, x23               // return destination pointer
 
